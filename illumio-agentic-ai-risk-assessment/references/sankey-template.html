@@ -1,0 +1,742 @@
+<title>Agentic AI Reach</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --surface-2: #f3f2ee;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --ring: rgba(11, 11, 11, 0.10);
+    --node: #b1afa7;
+    --focus: #2a78d6;
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+    --s4: #eda100;
+    --s5: #e87ba4;
+    --s6: #008300;
+    --s7: #4a3aa7;
+    --s8: #e34948;
+    --other: #9a9891;
+    --good: #0ca30c;
+    --warn: #fab219;
+    --serious: #ec835a;
+    --crit: #d03b3b;
+    --crit-wash: rgba(208, 59, 59, 0.07);
+    --link-opacity: 0.42;
+    --link-opacity-hi: 0.78;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-2: #232322;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --ring: rgba(255, 255, 255, 0.10);
+      --node: #55544f;
+      --focus: #3987e5;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+      --s4: #c98500;
+      --s5: #d55181;
+      --s6: #008300;
+      --s7: #9085e9;
+      --s8: #e66767;
+      --other: #6f6e68;
+      --crit-wash: rgba(208, 59, 59, 0.14);
+      --link-opacity: 0.5;
+      --link-opacity-hi: 0.85;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.10);
+    --node: #55544f;
+    --focus: #3987e5;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --s5: #d55181;
+    --s6: #008300;
+    --s7: #9085e9;
+    --s8: #e66767;
+    --other: #6f6e68;
+    --crit-wash: rgba(208, 59, 59, 0.14);
+    --link-opacity: 0.5;
+    --link-opacity-hi: 0.85;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    padding-inline: 20px;
+    padding-block: 28px 48px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  header h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance; }
+  header p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .kpi { background: var(--surface); border: 1px solid var(--ring); border-radius: 6px; padding: 12px 14px 10px; min-width: 0; }
+  .kpi .l { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi .v { font-size: 26px; font-weight: 600; line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi.crit .v { color: var(--crit); }
+  .kpi .s { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+  @media (max-width: 760px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi .v { font-size: 22px; } }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-start; }
+  .group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .group > .gl { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--axis); background: var(--surface); color: var(--ink);
+    border-radius: 999px; padding: 4px 11px 4px 8px; font: inherit; font-size: 13px; cursor: pointer;
+    transition: background 120ms, border-color 120ms, opacity 120ms;
+  }
+  .chip .sw { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+  .chip[aria-pressed="false"] { opacity: 0.5; }
+  .chip[aria-pressed="false"] .sw { background: transparent; box-shadow: inset 0 0 0 2px var(--c); }
+  .chip:hover { background: var(--surface-2); }
+  .chip:focus-visible, .seg label:focus-within, .check:focus-within, .linkbtn:focus-visible, th button:focus-visible, .node:focus-visible rect { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 6px; overflow: hidden; background: var(--surface); }
+  .seg label { position: relative; padding: 5px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2); border-right: 1px solid var(--axis); user-select: none; }
+  .seg label:last-child { border-right: 0; }
+  .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+  .seg label:has(input:checked) { background: var(--ink); color: var(--surface); }
+
+  .check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 0; cursor: pointer; }
+  .check input { width: 15px; height: 15px; margin: 0; accent-color: var(--crit); }
+  .linkbtn { background: none; border: 0; color: var(--ink-2); font: inherit; font-size: 13px; padding: 5px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .linkbtn:hover { color: var(--ink); }
+  .group.tail { margin-left: auto; align-self: flex-end; }
+
+  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; }
+  .card.viz { position: relative; padding: 14px 8px 8px; }
+  .scroll { overflow-x: auto; overflow-y: hidden; }
+  svg { display: block; }
+  .node rect { cursor: pointer; }
+  .node rect.reg { stroke: var(--crit); stroke-width: 2px; }
+  .node:focus { outline: none; }
+  .lbl { font-size: 12.5px; font-weight: 600; fill: var(--ink); pointer-events: none; }
+  .lbl.mid { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .sub { font-size: 11px; fill: var(--muted); pointer-events: none; }
+  .sub.mid { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; font-variant-numeric: tabular-nums; }
+  .colhead { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--muted); }
+  .flag { fill: var(--crit); }
+  .link { fill: none; stroke-opacity: var(--link-opacity); transition: stroke-opacity 140ms, opacity 140ms; }
+  .link.hi { stroke-opacity: var(--link-opacity-hi); }
+  .link.dim { opacity: 0.12; }
+  .node.dim { opacity: 0.3; }
+  .hit { fill: none; stroke: transparent; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .link, .chip { transition: none; } }
+
+  .tip {
+    position: absolute; z-index: 5; pointer-events: none; max-width: 320px;
+    background: var(--ink); color: var(--surface); border-radius: 6px; padding: 9px 11px; font-size: 12px; line-height: 1.4;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  }
+  .tip .t { font-weight: 600; font-size: 12.5px; }
+  .tip .big { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
+  .tip .big small { font-size: 11px; font-weight: 500; opacity: 0.75; margin-left: 4px; }
+  .tip ul { list-style: none; margin: 0; padding: 6px 0 0; border-top: 1px solid rgba(128,128,128,0.35); display: grid; gap: 2px; }
+  .tip li { display: flex; justify-content: space-between; gap: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tip li span:first-child { overflow: hidden; text-overflow: ellipsis; }
+  .tip li.more { opacity: 0.7; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 8px 8px 2px; font-size: 12px; color: var(--ink-2); align-items: center; }
+  .legend .k { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .flag-glyph { color: var(--crit); font-size: 11px; }
+  .legend .nd { width: 12px; height: 12px; border-radius: 2px; background: var(--node); }
+  .legend .nd.reg { box-shadow: inset 0 0 0 2px var(--crit); }
+
+  .empty { padding: 40px 16px; text-align: center; color: var(--ink-2); }
+
+  .tablehead { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; padding: 14px 16px 8px; }
+  .tablehead h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .tablehead .n { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 900px; }
+  th, td { text-align: left; padding: 7px 10px; border-top: 1px solid var(--grid); white-space: nowrap; }
+  th { border-top: 0; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface); position: sticky; top: 0; }
+  th button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  th button:hover { color: var(--ink); }
+  th.sorted button { color: var(--ink); }
+  th .arr { font-size: 10px; opacity: 0; width: 8px; display: inline-block; }
+  th.sorted .arr { opacity: 1; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  td.dim { color: var(--ink-2); }
+  tr.reg td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+  tr.reg td.app .g { color: var(--crit); font-size: 11px; margin-right: 5px; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .pol { display: inline-flex; align-items: center; gap: 6px; }
+  .pol i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pol.allowed i { background: var(--good); }
+  .pol.blocked i { background: var(--crit); }
+  .pol.potentially_blocked i { background: var(--warn); }
+  .comp { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--crit); color: var(--crit); }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Illumio · agentic AI risk assessment</p>
+    <h1>Agentic AI reach across managed endpoints</h1>
+    <p>Endpoint → agent process → internal application. Link width is connection count.</p>
+  </header>
+
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi"><div class="l">Endpoints</div><div class="v" id="kpiEndpoints">0</div><div class="s" id="kpiEndpointsSub">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Agents</div><div class="v" id="kpiAgents">0</div><div class="s" id="kpiAgentsSub">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Applications</div><div class="v" id="kpiApps">0</div><div class="s" id="kpiAppsSub">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Connections</div><div class="v" id="kpiConns">0</div><div class="s" id="kpiConnsSub">&nbsp;</div></div>
+    <div class="kpi crit"><div class="l">Regulated reach</div><div class="v" id="kpiReg">0</div><div class="s" id="kpiRegSub">&nbsp;</div></div>
+  </section>
+
+  <section class="toolbar" aria-label="Filters">
+    <div class="group">
+      <span class="gl">Agent</span>
+      <div class="chips" id="agentChips"></div>
+    </div>
+    <div class="group">
+      <span class="gl">Source</span>
+      <div class="seg" id="kindSeg" role="radiogroup" aria-label="Source kind"></div>
+    </div>
+    <div class="group">
+      <span class="gl">Scope</span>
+      <label class="check" for="regOnly"><input type="checkbox" id="regOnly"> Regulated only</label>
+    </div>
+    <div class="group tail">
+      <button class="linkbtn" id="resetBtn" type="button">Reset filters</button>
+    </div>
+  </section>
+
+  <section class="card viz" aria-label="Reach diagram">
+    <div class="scroll" id="scroll">
+      <svg id="sankey" role="img" aria-label="Sankey diagram of endpoint to agent to application flows"></svg>
+    </div>
+    <div class="empty" id="empty" hidden>No flows match the current filters.</div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="legend" id="legend">
+      <span class="k"><span class="nd"></span>Endpoint or application</span>
+      <span class="k"><span class="nd reg"></span><span class="flag-glyph">◆</span>Regulated application</span>
+      <span class="k" id="legendNote">Hover a ribbon for the hosts and ports behind it. Click a node to pin its paths.</span>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Flow table">
+    <div class="tablehead">
+      <h2>Flows</h2>
+      <span class="n" id="tableCount"></span>
+    </div>
+    <div class="scroll">
+      <table id="flows">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-sankey/0.12.3/d3-sankey.min.js"></script>
+<script>
+// ==== DATA (replace from aggregate_flows.py output) ====
+const RAW = [
+  // one row per (endpoint, agent, destination host, port, proto)
+  {src:"vdi-hr-01",  user:"m.keller",  kind:"vdi",    agent:"Cursor",  dst:"pay-web01",  app:"payments",     port:443,  proto:"tcp", connections:48211, policy:"allowed"},
+  {src:"vdi-hr-01",  user:"m.keller",  kind:"vdi",    agent:"Cursor",  dst:"hrm-app01",  app:"hrm",          port:443,  proto:"tcp", connections:12780, policy:"allowed"},
+  {src:"vdi-hr-01",  user:"m.keller",  kind:"vdi",    agent:"ChatGPT", dst:"hrm-app01",  app:"hrm",          port:8443, proto:"tcp", connections:6410,  policy:"allowed"},
+  {src:"vdi-hr-01",  user:"m.keller",  kind:"vdi",    agent:"ChatGPT", dst:"dc01",       app:"ad",           port:389,  proto:"tcp", connections:2150,  policy:"potentially_blocked"},
+  {src:"vdi-fin-02", user:"s.brandt",  kind:"vdi",    agent:"Claude",  dst:"pay-api02",  app:"payments",     port:8443, proto:"tcp", connections:31920, policy:"allowed"},
+  {src:"vdi-fin-02", user:"s.brandt",  kind:"vdi",    agent:"Claude",  dst:"swift-gw01", app:"swift-gw",     port:443,  proto:"tcp", connections:9860,  policy:"allowed"},
+  {src:"vdi-fin-02", user:"s.brandt",  kind:"vdi",    agent:"Cursor",  dst:"pos-db01",   app:"pos-db",       port:5432, proto:"tcp", connections:14390, policy:"blocked"},
+  {src:"vdi-dev-03", user:"j.okafor",  kind:"vdi",    agent:"Cursor",  dst:"git01",      app:"git-internal", port:443,  proto:"tcp", connections:58330, policy:"allowed"},
+  {src:"vdi-dev-03", user:"j.okafor",  kind:"vdi",    agent:"Cursor",  dst:"git01",      app:"git-internal", port:22,   proto:"tcp", connections:21040, policy:"allowed"},
+  {src:"vdi-dev-03", user:"j.okafor",  kind:"vdi",    agent:"Codex",   dst:"pay-api02",  app:"payments",     port:8443, proto:"tcp", connections:7720,  policy:"allowed"},
+  {src:"vdi-dev-03", user:"j.okafor",  kind:"vdi",    agent:"Codex",   dst:"jump01",     app:"jump-infra",   port:3389, proto:"tcp", connections:1380,  policy:"potentially_blocked"},
+  {src:"vdi-ops-04", user:"l.novak",   kind:"vdi",    agent:"Claude",  dst:"jump01",     app:"jump-infra",   port:3389, proto:"tcp", connections:4920,  policy:"allowed"},
+  {src:"vdi-ops-04", user:"l.novak",   kind:"vdi",    agent:"Claude",  dst:"dc01",       app:"ad",           port:445,  proto:"tcp", connections:3310,  policy:"allowed"},
+  {src:"vdi-ops-04", user:"l.novak",   kind:"vdi",    agent:"Claude",  dst:"dc01",       app:"ad",           port:88,   proto:"tcp", connections:2890,  policy:"allowed"},
+  {src:"vdi-ops-04", user:"l.novak",   kind:"vdi",    agent:"ChatGPT", dst:"pos-db01",   app:"pos-db",       port:5432, proto:"tcp", connections:860,   policy:"unknown"},
+  {src:"vdi-trs-05", user:"a.moreau",  kind:"vdi",    agent:"ChatGPT", dst:"swift-gw01", app:"swift-gw",     port:443,  proto:"tcp", connections:17650, policy:"allowed"},
+  {src:"vdi-trs-05", user:"a.moreau",  kind:"vdi",    agent:"ChatGPT", dst:"swift-gw01", app:"swift-gw",     port:8443, proto:"tcp", connections:5210,  policy:"allowed"},
+  {src:"vdi-trs-05", user:"a.moreau",  kind:"vdi",    agent:"Cursor",  dst:"pay-web01",  app:"payments",     port:443,  proto:"tcp", connections:9040,  policy:"allowed"},
+  {src:"lt-dev-11",  user:"r.singh",   kind:"laptop", agent:"Cursor",  dst:"git01",      app:"git-internal", port:443,  proto:"tcp", connections:44120, policy:"allowed"},
+  {src:"lt-dev-11",  user:"r.singh",   kind:"laptop", agent:"Codex",   dst:"git01",      app:"git-internal", port:22,   proto:"tcp", connections:16280, policy:"allowed"},
+  {src:"lt-dev-11",  user:"r.singh",   kind:"laptop", agent:"Codex",   dst:"pos-db01",   app:"pos-db",       port:5432, proto:"tcp", connections:2730,  policy:"blocked"},
+  {src:"lt-sec-12",  user:"t.nguyen",  kind:"laptop", agent:"Claude",  dst:"jump01",     app:"jump-infra",   port:3389, proto:"tcp", connections:8460,  policy:"allowed"},
+  {src:"lt-sec-12",  user:"t.nguyen",  kind:"laptop", agent:"Claude",  dst:"dc01",       app:"ad",           port:389,  proto:"tcp", connections:1940,  policy:"allowed"},
+  {src:"lt-fin-13",  user:"c.weber",   kind:"laptop", agent:"ChatGPT", dst:"pay-web01",  app:"payments",     port:443,  proto:"tcp", connections:11530, policy:"allowed"},
+  {src:"lt-fin-13",  user:"c.weber",   kind:"laptop", agent:"Codex",   dst:"swift-gw01", app:"swift-gw",     port:443,  proto:"tcp", connections:3260,  policy:"potentially_blocked"},
+  {src:"lt-fin-13",  user:"c.weber",   kind:"laptop", agent:"Codex",   dst:"hrm-app01",  app:"hrm",          port:443,  proto:"tcp", connections:1190,  policy:"allowed"}
+];
+const HOSTS = {
+  // every managed workload that appears as src or dst
+  "vdi-hr-01":  {kind:"vdi",    user:"m.keller", labels:{role:"employee",   app:"vdi",    env:"Users", loc:"FRA",    os:"windows", type:"endpoint"}},
+  "vdi-fin-02": {kind:"vdi",    user:"s.brandt", labels:{role:"analyst",    app:"vdi",    env:"Users", loc:"FRA",    os:"windows", type:"endpoint"}},
+  "vdi-dev-03": {kind:"vdi",    user:"j.okafor", labels:{role:"developer",  app:"vdi",    env:"Users", loc:"FRA",    os:"windows", type:"endpoint"}},
+  "vdi-ops-04": {kind:"vdi",    user:"l.novak",  labels:{role:"operations", app:"vdi",    env:"Users", loc:"MUC",    os:"windows", type:"endpoint"}},
+  "vdi-trs-05": {kind:"vdi",    user:"a.moreau", labels:{role:"treasury",   app:"vdi",    env:"Users", loc:"FRA",    os:"windows", type:"endpoint"}},
+  "lt-dev-11":  {kind:"laptop", user:"r.singh",  labels:{role:"developer",  app:"laptop", env:"Users", loc:"remote", os:"macos",   type:"endpoint"}},
+  "lt-sec-12":  {kind:"laptop", user:"t.nguyen", labels:{role:"security",   app:"laptop", env:"Users", loc:"remote", os:"macos",   type:"endpoint"}},
+  "lt-fin-13":  {kind:"laptop", user:"c.weber",  labels:{role:"controller", app:"laptop", env:"Users", loc:"MUC",    os:"windows", type:"endpoint"}},
+  "pay-web01":  {kind:"server", labels:{app:"payments",     env:"prod", role:"web",     loc:"FRA", bu:"finance"}},
+  "pay-api02":  {kind:"server", labels:{app:"payments",     env:"prod", role:"api",     loc:"FRA", bu:"finance"}},
+  "swift-gw01": {kind:"server", labels:{app:"swift-gw",     env:"prod", role:"gateway", loc:"FRA", bu:"treasury"}},
+  "pos-db01":   {kind:"server", labels:{app:"pos-db",       env:"PCI",  role:"db",      loc:"FRA", bu:"retail"}},
+  "dc01":       {kind:"server", labels:{app:"ad",           env:"prod", role:"dc",      loc:"FRA", bu:"it"}},
+  "jump01":     {kind:"server", labels:{app:"jump-infra",   env:"prod", role:"jumpbox", loc:"FRA", bu:"it"}},
+  "hrm-app01":  {kind:"server", labels:{app:"hrm",          env:"prod", role:"web",     loc:"MUC", bu:"hr"}},
+  "git01":      {kind:"server", labels:{app:"git-internal", env:"prod", role:"scm",     loc:"FRA", bu:"engineering"}}
+};
+const APPS = {
+  // one entry per destination app
+  "payments":     {bu:"finance",     env:"prod", compliance:"",      regulated:false},
+  "swift-gw":     {bu:"treasury",    env:"prod", compliance:"SWIFT", regulated:true},
+  "pos-db":       {bu:"retail",      env:"PCI",  compliance:"PCI",   regulated:true},
+  "ad":           {bu:"it",          env:"prod", compliance:"",      regulated:false},
+  "jump-infra":   {bu:"it",          env:"prod", compliance:"",      regulated:false},
+  "hrm":          {bu:"hr",          env:"prod", compliance:"",      regulated:false},
+  "git-internal": {bu:"engineering", env:"prod", compliance:"",      regulated:false}
+};
+// ==== END DATA ====
+
+// ---- Fixed vocabularies -------------------------------------------------
+const AGENT_ORDER = ["Cursor", "ChatGPT", "Claude", "Claude Code", "Codex", "Windsurf", "Copilot", "Gemini", "Aider", "Ollama", "LM Studio"];
+const KIND_ORDER = ["vdi", "laptop"];
+const POLICY_LABEL = { allowed: "Allowed", blocked: "Blocked", potentially_blocked: "Potentially blocked", unknown: "Unknown" };
+const fmt = new Intl.NumberFormat("en-US");
+const num = (n) => fmt.format(Math.round(n || 0));
+
+function agentRank(a) { const i = AGENT_ORDER.indexOf(a); return i < 0 ? AGENT_ORDER.length : i; }
+function agentCmp(a, b) { return agentRank(a) - agentRank(b) || String(a).localeCompare(String(b)); }
+function kindRank(k) { const i = KIND_ORDER.indexOf(k); return i < 0 ? KIND_ORDER.length : i; }
+function kindCmp(a, b) { return kindRank(a) - kindRank(b) || String(a).localeCompare(String(b)); }
+function kindLabel(k) { return k === "vdi" ? "VDI" : k === "laptop" ? "Laptop" : k ? k[0].toUpperCase() + k.slice(1) : "Unknown"; }
+function appMeta(app) { return APPS[app] || {}; }
+function isRegulated(app) { const a = appMeta(app); return !!(a.regulated || a.compliance); }
+function hostMeta(h) { return HOSTS[h] || {}; }
+function rowKind(r) { return r.kind || hostMeta(r.src).kind || "unknown"; }
+function rowUser(r) { return r.user || hostMeta(r.src).user || ""; }
+
+// Colour follows the agent, assigned once from the full dataset in fixed order,
+// so filtering never repaints survivors. Slots 9+ fold into the neutral "other" tone.
+const agentsAll = [...new Set(RAW.map(r => r.agent))].sort(agentCmp);
+const agentSlot = new Map(agentsAll.map((a, i) => [a, i < 8 ? `--s${i + 1}` : "--other"]));
+const agentColor = (a) => `var(${agentSlot.get(a) || "--other"})`;
+const kindsAll = [...new Set(RAW.map(rowKind))].sort(kindCmp);
+
+// ---- State --------------------------------------------------------------
+const state = { agents: new Set(agentsAll), kind: "all", regulatedOnly: false, sortKey: "connections", sortDir: "desc", pinned: null };
+
+function filteredRows() {
+  return RAW.filter(r => state.agents.has(r.agent)
+    && (state.kind === "all" || rowKind(r) === state.kind)
+    && (!state.regulatedOnly || isRegulated(r.app)));
+}
+
+// ---- Toolbar ------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+
+function buildToolbar() {
+  const chips = $("agentChips");
+  agentsAll.forEach(a => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.setAttribute("aria-pressed", "true");
+    b.style.setProperty("--c", agentColor(a));
+    b.id = "chip-" + a.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const sw = document.createElement("span"); sw.className = "sw";
+    b.append(sw, document.createTextNode(a));
+    b.addEventListener("click", () => {
+      if (state.agents.has(a)) state.agents.delete(a); else state.agents.add(a);
+      b.setAttribute("aria-pressed", String(state.agents.has(a)));
+      render();
+    });
+    chips.appendChild(b);
+  });
+
+  const seg = $("kindSeg");
+  const opts = [["all", "All"], ...kindsAll.map(k => [k, kindLabel(k)])];
+  opts.forEach(([val, text]) => {
+    const l = document.createElement("label");
+    const i = document.createElement("input");
+    i.type = "radio"; i.name = "kind"; i.value = val; i.id = "kind-" + val; i.checked = val === state.kind;
+    i.addEventListener("change", () => { state.kind = val; render(); });
+    l.append(i, document.createTextNode(text));
+    seg.appendChild(l);
+  });
+
+  $("regOnly").addEventListener("change", (e) => { state.regulatedOnly = e.target.checked; render(); });
+  $("resetBtn").addEventListener("click", () => {
+    state.agents = new Set(agentsAll); state.kind = "all"; state.regulatedOnly = false; state.pinned = null;
+    chips.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "true"));
+    $("kind-all").checked = true; $("regOnly").checked = false;
+    render();
+  });
+}
+
+// ---- KPIs ---------------------------------------------------------------
+function renderKpis(rows) {
+  const eps = new Set(rows.map(r => r.src));
+  const agents = new Set(rows.map(r => r.agent));
+  const apps = new Set(rows.map(r => r.app));
+  const conns = rows.reduce((s, r) => s + (+r.connections || 0), 0);
+  const regRows = rows.filter(r => isRegulated(r.app));
+  const regEps = new Set(regRows.map(r => r.src));
+  const regApps = new Set(regRows.map(r => r.app));
+  const kindOfEp = new Map(rows.map(r => [r.src, rowKind(r)]));
+  const vdi = [...eps].filter(e => kindOfEp.get(e) === "vdi").length;
+  const laptop = [...eps].filter(e => kindOfEp.get(e) === "laptop").length;
+  $("kpiEndpoints").textContent = num(eps.size);
+  $("kpiEndpointsSub").textContent = eps.size ? `${vdi} VDI · ${laptop} laptop` : "no flows";
+  $("kpiAgents").textContent = num(agents.size);
+  $("kpiAgentsSub").textContent = `of ${agentsAll.length} observed`;
+  $("kpiApps").textContent = num(apps.size);
+  $("kpiAppsSub").textContent = `${regApps.size} regulated`;
+  $("kpiConns").textContent = num(conns);
+  $("kpiConnsSub").textContent = `${num(rows.length)} flows`;
+  $("kpiReg").textContent = num(regEps.size);
+  $("kpiRegSub").textContent = regEps.size === 1 ? "endpoint reaches regulated apps" : "endpoints reach regulated apps";
+}
+
+// ---- Graph model --------------------------------------------------------
+function buildGraph(rows) {
+  const srcTot = new Map(), agTot = new Map(), appTot = new Map();
+  const l1 = new Map(), l2 = new Map();
+  const add = (m, k, v) => m.set(k, (m.get(k) || 0) + v);
+  const kindOf = new Map();
+  rows.forEach(r => {
+    const v = +r.connections || 0;
+    if (!kindOf.has(r.src)) kindOf.set(r.src, rowKind(r));
+    add(srcTot, r.src, v); add(agTot, r.agent, v); add(appTot, r.app, v);
+    const k1 = r.src + "|" + r.agent, k2 = r.agent + "|" + r.app;
+    if (!l1.has(k1)) l1.set(k1, { source: "src:" + r.src, target: "ag:" + r.agent, value: 0, rows: [], srcs: new Set(), apps: new Set() });
+    if (!l2.has(k2)) l2.set(k2, { source: "ag:" + r.agent, target: "app:" + r.app, value: 0, rows: [], srcs: new Set(), apps: new Set() });
+    for (const L of [l1.get(k1), l2.get(k2)]) { L.value += v; L.rows.push(r); L.srcs.add(r.src); L.apps.add(r.app); }
+  });
+  const srcs = [...srcTot.keys()].sort((a, b) => kindCmp(kindOf.get(a), kindOf.get(b)) || srcTot.get(b) - srcTot.get(a) || a.localeCompare(b));
+  const ags = [...agTot.keys()].sort(agentCmp);
+  const apps = [...appTot.keys()].sort((a, b) => (isRegulated(b) - isRegulated(a)) || appTot.get(b) - appTot.get(a) || a.localeCompare(b));
+  const nodes = [
+    ...srcs.map(n => ({ id: "src:" + n, col: 0, name: n, kind: kindOf.get(n) })),
+    ...ags.map(n => ({ id: "ag:" + n, col: 1, name: n })),
+    ...apps.map(n => ({ id: "app:" + n, col: 2, name: n, reg: isRegulated(n) }))
+  ];
+  return { nodes, links: [...l1.values(), ...l2.values()], counts: [srcs.length, ags.length, apps.length] };
+}
+
+// ---- Sankey -------------------------------------------------------------
+const svg = d3.select("#sankey");
+const tip = $("tip");
+const card = document.querySelector(".card.viz");
+let current = null; // laid-out graph
+
+function renderSankey(rows) {
+  svg.selectAll("*").remove();
+  const empty = rows.length === 0;
+  $("empty").hidden = !empty;
+  $("scroll").hidden = empty;
+  if (empty) { current = null; return; }
+
+  const g = buildGraph(rows);
+  const mL = 168, mR = 214, mT = 34, mB = 10, nodeW = 14, pad = 26, rowH = 54;
+  const W = Math.max($("scroll").clientWidth || 0, 820);
+  const H = mT + mB + Math.max(...g.counts) * rowH;
+  svg.attr("width", W).attr("height", H).attr("viewBox", `0 0 ${W} ${H}`);
+
+  const layout = d3.sankey()
+    .nodeId(d => d.id).nodeWidth(nodeW).nodePadding(pad)
+    .nodeAlign(d3.sankeyLeft).nodeSort(null)
+    .extent([[mL, mT], [W - mR, H - mB]]);
+  const graph = layout({ nodes: g.nodes.map(d => ({ ...d })), links: g.links.map(d => ({ ...d })) });
+  current = graph;
+
+  // column headings
+  const colX = [mL + nodeW, null, W - mR - nodeW];
+  const midNode = graph.nodes.find(n => n.col === 1);
+  colX[1] = midNode ? (midNode.x0 + midNode.x1) / 2 : W / 2;
+  const heads = [["Endpoint", colX[0], "end"], ["Agent process", colX[1], "middle"], ["Internal application", colX[2], "start"]];
+  svg.append("g").selectAll("text").data(heads).join("text")
+    .attr("class", "colhead").attr("x", d => d[1]).attr("y", 14).attr("text-anchor", d => d[2]).text(d => d[0]);
+
+  // links: visible ribbon + wider transparent hit target
+  const linkG = svg.append("g");
+  linkG.selectAll("path.link").data(graph.links).join("path")
+    .attr("class", "link").attr("d", d3.sankeyLinkHorizontal())
+    .style("stroke", d => agentColor(d.source.col === 1 ? d.source.name : d.target.name))
+    .attr("stroke-width", d => Math.max(1.5, d.width));
+  linkG.selectAll("path.hit").data(graph.links).join("path")
+    .attr("class", "hit").attr("d", d3.sankeyLinkHorizontal())
+    .attr("stroke-width", d => Math.max(14, d.width))
+    .on("pointerenter", (e, d) => { setFocus({ link: d }); showLinkTip(d, e); })
+    .on("pointermove", (e) => moveTip(e))
+    .on("pointerleave", () => { setFocus(null); hideTip(); });
+
+  // nodes
+  const nodeG = svg.append("g").selectAll("g.node").data(graph.nodes).join("g")
+    .attr("class", "node").attr("tabindex", 0).attr("role", "button")
+    .attr("aria-label", d => `${d.name}, ${num(d.value)} connections`);
+  nodeG.append("rect")
+    .attr("class", d => d.reg ? "reg" : null)
+    .attr("x", d => d.x0).attr("y", d => d.y0)
+    .attr("width", d => d.x1 - d.x0).attr("height", d => Math.max(2, d.y1 - d.y0))
+    .attr("rx", 2)
+    .style("fill", d => d.col === 1 ? agentColor(d.name) : "var(--node)");
+
+  // labels
+  const lx = d => d.col === 0 ? d.x0 - 8 : d.x1 + 8;
+  const anchor = d => d.col === 0 ? "end" : "start";
+  const cy = d => (d.y0 + d.y1) / 2;
+  nodeG.append("text")
+    .attr("class", d => "lbl" + (d.col === 1 ? " mid" : ""))
+    .attr("x", lx).attr("y", d => cy(d) - 2).attr("text-anchor", anchor)
+    .each(function (d) {
+      const t = d3.select(this);
+      if (d.reg) t.append("tspan").attr("class", "flag").text("◆ ");
+      t.append("tspan").text(d.name);
+    });
+  nodeG.append("text")
+    .attr("class", d => "sub" + (d.col === 1 ? " mid" : ""))
+    .attr("x", lx).attr("y", d => cy(d) + 12).attr("text-anchor", anchor)
+    .text(d => subLabel(d));
+
+  nodeG
+    .on("pointerenter", (e, d) => { setFocus({ node: d }); showNodeTip(d, e); })
+    .on("pointermove", (e) => moveTip(e))
+    .on("pointerleave", () => { setFocus(null); hideTip(); })
+    .on("focus", (e, d) => setFocus({ node: d }))
+    .on("blur", () => setFocus(null))
+    .on("click", (e, d) => { e.preventDefault(); togglePin(d); })
+    .on("keydown", (e, d) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); togglePin(d); } });
+
+  svg.on("click", (e) => { if (e.target === svg.node()) { state.pinned = null; setFocus(null); } });
+  applyPinned();
+}
+
+function subLabel(d) {
+  if (d.col === 0) {
+    const h = hostMeta(d.name); const role = (h.labels && h.labels.role) || kindLabel(d.kind);
+    return [role, h.user].filter(Boolean).join(" · ");
+  }
+  if (d.col === 1) return num(d.value) + " conn.";
+  const a = appMeta(d.name);
+  return [a.bu, a.compliance || (a.env && a.env !== "prod" ? a.env : "")].filter(Boolean).join(" · ") || "internal";
+}
+
+// ---- Highlight ----------------------------------------------------------
+function linkTouches(L, node) {
+  if (node.col === 0) return L.srcs.has(node.name);
+  if (node.col === 2) return L.apps.has(node.name);
+  return L.source === node || L.target === node;
+}
+function setFocus(f) {
+  const focus = f || (state.pinned && current ? { node: current.nodes.find(n => n.id === state.pinned) } : null);
+  const links = svg.selectAll("path.link"), nodes = svg.selectAll("g.node");
+  if (!focus || (!focus.node && !focus.link)) {
+    links.classed("dim", false).classed("hi", false); nodes.classed("dim", false); return;
+  }
+  const on = focus.link ? (L => L === focus.link) : (L => linkTouches(L, focus.node));
+  const litNodes = new Set();
+  links.each(function (L) { if (on(L)) { litNodes.add(L.source); litNodes.add(L.target); } });
+  links.classed("hi", L => on(L)).classed("dim", L => !on(L));
+  nodes.classed("dim", n => !litNodes.has(n));
+}
+function togglePin(d) { state.pinned = state.pinned === d.id ? null : d.id; applyPinned(); }
+function applyPinned() { setFocus(null); }
+
+// ---- Tooltip ------------------------------------------------------------
+function tipRows(title, total, unit, items, moreN) {
+  tip.replaceChildren();
+  const t = document.createElement("div"); t.className = "t"; t.textContent = title;
+  const b = document.createElement("div"); b.className = "big"; b.textContent = num(total);
+  const s = document.createElement("small"); s.textContent = unit; b.appendChild(s);
+  tip.append(t, b);
+  if (items.length) {
+    const ul = document.createElement("ul");
+    items.forEach(([l, v]) => {
+      const li = document.createElement("li");
+      const a = document.createElement("span"); a.textContent = l;
+      const c = document.createElement("span"); c.textContent = num(v);
+      li.append(a, c); ul.appendChild(li);
+    });
+    if (moreN > 0) { const li = document.createElement("li"); li.className = "more"; li.textContent = `+${moreN} more`; ul.appendChild(li); }
+    tip.appendChild(ul);
+  }
+  tip.hidden = false;
+}
+function topN(map, n = 10) {
+  const arr = [...map.entries()].sort((a, b) => b[1] - a[1]);
+  return [arr.slice(0, n), Math.max(0, arr.length - n)];
+}
+function showLinkTip(L, e) {
+  const m = new Map();
+  if (L.source.col === 0) {
+    // endpoint -> agent: the apps and ports behind this ribbon
+    L.rows.forEach(r => { const k = `${r.app} · ${r.dst}:${r.port}/${r.proto}`; m.set(k, (m.get(k) || 0) + (+r.connections || 0)); });
+  } else {
+    // agent -> app: the endpoints and host:port pairs behind it
+    L.rows.forEach(r => { const k = `${r.src} → ${r.dst}:${r.port}`; m.set(k, (m.get(k) || 0) + (+r.connections || 0)); });
+  }
+  const [items, more] = topN(m, 12);
+  tipRows(`${L.source.name} → ${L.target.name}`, L.value, "connections", items, more);
+  moveTip(e);
+}
+function showNodeTip(d, e) {
+  const m = new Map();
+  const seen = new Set();
+  current.links.filter(L => linkTouches(L, d)).flatMap(L => L.rows).forEach(r => {
+    const id = [r.src, r.agent, r.dst, r.port, r.proto].join("|");
+    if (seen.has(id)) return; seen.add(id);
+    const k = d.col === 0 ? `${r.agent} → ${r.app}` : d.col === 1 ? `${r.src} → ${r.app}` : `${r.src} via ${r.agent}`;
+    m.set(k, (m.get(k) || 0) + (+r.connections || 0));
+  });
+  const [items, more] = topN(m, 10);
+  const title = d.col === 0 ? `${d.name} · ${kindLabel(d.kind)}` : d.col === 1 ? `${d.name} · agent process` : `${d.name}${d.reg ? " · regulated" : ""}`;
+  tipRows(title, d.value, "connections", items, more);
+  moveTip(e);
+}
+function moveTip(e) {
+  if (tip.hidden) return;
+  const r = card.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+  if (x + tw > r.width - 8) x = e.clientX - r.left - tw - 14;
+  if (x < 8) x = 8;
+  if (y + th > r.height - 8) y = Math.max(8, e.clientY - r.top - th - 14);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.hidden = true; }
+
+// ---- Table --------------------------------------------------------------
+const COLS = [
+  { key: "src", label: "Endpoint", get: r => r.src },
+  { key: "kind", label: "Kind", get: r => kindLabel(rowKind(r)), cmp: (a, b) => kindCmp(rowKind(a), rowKind(b)), dim: true },
+  { key: "user", label: "User", get: r => rowUser(r), dim: true },
+  { key: "agent", label: "Agent", get: r => r.agent, cmp: (a, b) => agentCmp(a.agent, b.agent) },
+  { key: "dst", label: "Destination", get: r => r.dst, mono: true },
+  { key: "app", label: "App", get: r => r.app },
+  { key: "bu", label: "BU", get: r => appMeta(r.app).bu || "", dim: true },
+  { key: "compliance", label: "Compliance", get: r => appMeta(r.app).compliance || "" },
+  { key: "port", label: "Port", get: r => +r.port || 0, num: true },
+  { key: "proto", label: "Proto", get: r => r.proto, dim: true },
+  { key: "connections", label: "Connections", get: r => +r.connections || 0, num: true },
+  { key: "policy", label: "Policy", get: r => POLICY_LABEL[r.policy] || r.policy || "Unknown" }
+];
+
+function buildTableHead() {
+  const tr = $("thead");
+  COLS.forEach(c => {
+    const th = document.createElement("th"); th.dataset.key = c.key; if (c.num) th.className = "num";
+    const b = document.createElement("button"); b.type = "button"; b.id = "sort-" + c.key;
+    const arr = document.createElement("span"); arr.className = "arr"; arr.textContent = "▾";
+    b.append(document.createTextNode(c.label), arr);
+    b.addEventListener("click", () => {
+      if (state.sortKey === c.key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      else { state.sortKey = c.key; state.sortDir = c.num ? "desc" : "asc"; }
+      renderTable(filteredRows());
+    });
+    th.appendChild(b); tr.appendChild(th);
+  });
+}
+
+function renderTable(rows) {
+  const col = COLS.find(c => c.key === state.sortKey) || COLS[10];
+  const dir = state.sortDir === "asc" ? 1 : -1;
+  const cmp = col.cmp || ((a, b) => { const x = col.get(a), y = col.get(b); return typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y)); });
+  const sorted = rows.slice().sort((a, b) => dir * cmp(a, b) || (+b.connections || 0) - (+a.connections || 0) || String(a.src).localeCompare(String(b.src)));
+
+  document.querySelectorAll("#thead th").forEach(th => {
+    const on = th.dataset.key === state.sortKey;
+    th.classList.toggle("sorted", on);
+    th.querySelector(".arr").textContent = on && state.sortDir === "asc" ? "▴" : "▾";
+    th.setAttribute("aria-sort", on ? (state.sortDir === "asc" ? "ascending" : "descending") : "none");
+  });
+
+  const tb = $("tbody"); tb.replaceChildren();
+  sorted.forEach(r => {
+    const reg = isRegulated(r.app);
+    const tr = document.createElement("tr"); if (reg) tr.className = "reg";
+    COLS.forEach(c => {
+      const td = document.createElement("td");
+      if (c.num) td.classList.add("num");
+      if (c.mono) td.classList.add("mono");
+      if (c.dim) td.classList.add("dim");
+      if (c.key === "app") {
+        td.classList.add("app");
+        if (reg) { const g = document.createElement("span"); g.className = "g"; g.textContent = "◆"; g.title = "Regulated"; td.appendChild(g); }
+        td.appendChild(document.createTextNode(r.app));
+      } else if (c.key === "compliance") {
+        const v = c.get(r);
+        if (v) { const s = document.createElement("span"); s.className = "comp"; s.textContent = v; td.appendChild(s); }
+        else { td.classList.add("dim"); td.textContent = "·"; }
+      } else if (c.key === "policy") {
+        const s = document.createElement("span"); s.className = "pol " + (r.policy || "unknown");
+        const i = document.createElement("i"); s.append(i, document.createTextNode(c.get(r))); td.appendChild(s);
+      } else if (c.key === "agent") {
+        const s = document.createElement("span"); s.className = "pol";
+        const i = document.createElement("i"); i.style.background = agentColor(r.agent); i.style.borderRadius = "2px";
+        s.append(i, document.createTextNode(r.agent)); td.appendChild(s);
+      } else if (c.key === "connections") {
+        td.textContent = num(c.get(r));
+      } else {
+        td.textContent = c.get(r);
+      }
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  const conns = rows.reduce((s, r) => s + (+r.connections || 0), 0);
+  $("tableCount").textContent = `${num(rows.length)} flows · ${num(conns)} connections`;
+}
+
+// ---- Render all ---------------------------------------------------------
+function render() {
+  const rows = filteredRows();
+  if (state.pinned && !rows.some(r => "src:" + r.src === state.pinned || "ag:" + r.agent === state.pinned || "app:" + r.app === state.pinned)) state.pinned = null;
+  renderKpis(rows);
+  renderSankey(rows);
+  renderTable(rows);
+}
+
+buildToolbar();
+buildTableHead();
+render();
+
+let resizeTimer;
+let lastWidth = $("scroll").clientWidth;
+new ResizeObserver(() => {
+  const w = $("scroll").clientWidth;
+  if (w === lastWidth) return;
+  lastWidth = w;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => renderSankey(filteredRows()), 120);
+}).observe($("scroll"));
+</script>
