@@ -103,11 +103,28 @@ number of flows the PCE returned before grouping.
 
 Two constraints decide the query plan:
 
-1. **The PCE returns at most 500 flows per query, silently.** The server
-   overrides `max_results` to 500, and `truncated` only reports byte-size
-   trimming of the response, never the PCE cap. A result with
-   `total_pce_flows` of 500 (or 500 rows) is a truncated result. Split until
-   every slice comes back under 500.
+1. **Flow volume. Which strategy applies depends on the server version.**
+
+   *illumio-mcp 0.5.0 and later:* aggregating tools query the PCE wide
+   (`MCP_QUERY_MAX_RESULTS`, 200k) rather than clamping to 500, and truncation
+   is reported honestly: `totals.flows_truncated` means the PCE cap was hit and
+   the counts are lower bounds, `findings_truncated` means only the display was
+   trimmed, and `section_totals` always carries the full count. **Read those
+   fields instead of inferring truncation from a row count.** Date/label slicing
+   to stay under 500 is no longer needed for the summary.
+
+   *Before 0.5.0:* the server clamped `max_results` to 500 silently and
+   `truncated` reported only byte-size trimming, never the PCE cap. There, a
+   result with `total_pce_flows` of exactly 500 is truncated, and slices must be
+   split until every one comes back under 500.
+
+   **Either way, prefer filtering by agent process server-side.** On an estate
+   where a single day of endpoint traffic exceeds the cap, label and date
+   slicing is not enough — and `discover-process-egress` pushes the `process`
+   filter into the Explorer query (0.2.0+), so the narrowing happens on the PCE
+   instead of after the pull. That is both fewer queries and a complete answer.
+   Reported from the field on an estate where every day of laptop traffic
+   exceeded the limit.
 2. **`include_sources` and `include_destinations` take label shorthand only**
    (`key=value`). Workload hrefs and bare IPs fail with a
    `TrafficQueryFilter` type error. Entries in one list are **ANDed**:
@@ -125,11 +142,19 @@ Slicing plan:
   systems (`bu`; `app` if there is no `bu`).
 - One extra query per source slice with **no** destination filter, to catch
   egress and unlabeled destinations.
-- Save each result as `flows_<src>_<dst>.json` in the scratchpad. Note the
-  row count of every slice; any slice at 500 must be split again (add a third
-  label, or split by `proto`, or halve the date window).
+- Save each result as `flows_<src>_<dst>.json` in the scratchpad. On servers
+  before 0.5.0, note the row count of every slice; any slice at exactly 500 must
+  be split again (add a third label, or split by `proto`, or halve the date
+  window). On 0.5.0+, check `totals.flows_truncated` and `section_totals`
+  instead — a row count is not evidence of completeness either way.
 
 Merge:
+
+The merge tolerates a destination that flow data names but the workload
+inventory does not contain — unmanaged, outside the queried scope, or deleted
+between the two queries. Such hosts carry no labels and are counted in
+`summary.inventory_gaps` rather than aborting the run, so check that field: it
+bounds how complete the app and regulated-scope findings are.
 
 ```bash
 python3 scripts/aggregate_flows.py \

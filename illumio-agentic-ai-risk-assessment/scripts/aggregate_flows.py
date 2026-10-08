@@ -182,6 +182,50 @@ def build_host_map(path: Path):
     return hosts, ip_index
 
 
+# Flows and the workload inventory are two independent queries, and the flow
+# side can name a host the inventory does not contain:
+#
+#   - the workload query may be capped or label-filtered, so a destination is
+#     simply not in the fetched set;
+#   - a workload can be deleted between the two calls;
+#   - the PCE can report a hostname for something no longer managed.
+#
+# Every `hosts[...]` lookup assumed that join always succeeds. It does not, and
+# the whole run died on a bare `KeyError` partway through aggregation -- after
+# the expensive queries, with no partial output and nothing naming the host.
+#
+# Missing hosts are now recorded and reported rather than fatal: a destination
+# that is not in the inventory is a real and interesting state (it is unmanaged,
+# or outside the queried scope), not a reason to lose the analysis.
+MISSING_HOSTS: set[str] = set()
+
+_UNKNOWN_HOST = {
+    "href": "",
+    "ips": [],
+    "os": "",
+    "enforcement_mode": "",
+    "labels": {},
+    "missing_from_inventory": True,
+}
+
+
+def host_of(hosts, name):
+    """Workload record for a hostname, or a safe empty record.
+
+    Never raises. Callers read `.get("labels")` and friends, so an empty record
+    degrades to "no labels known" -- which is the truth about a host that is not
+    in the inventory.
+    """
+    if not name:
+        return _UNKNOWN_HOST
+    rec = hosts.get(name)
+    if rec is None:
+        MISSING_HOSTS.add(name)
+        return _UNKNOWN_HOST
+    return rec
+
+
+
 def parse_population(expr: str) -> list[list[tuple[str, str]]]:
     """'a=1,b=2|c=3' -> [[(a,1),(b,2)], [(c,3)]]: OR of AND groups."""
     groups = []
@@ -349,7 +393,7 @@ def analyse(rows, hosts, pop_pairs, args):
     egress = [r for r in agent_rows if r["scope"] != "internal"]
 
     for r in internal:
-        d = hosts[r["dst_host"]]
+        d = host_of(hosts, r["dst_host"])
         r["dst_labels"] = defining(d["labels"], keep)
         r["app"] = d["labels"].get("app") or r["dst_host"]
         r["regulated"] = is_regulated(d["labels"], args.regulated_label, reg_env_re)
@@ -380,7 +424,7 @@ def analyse(rows, hosts, pop_pairs, args):
     endpoints_with_agents = sorted({r["src"] for r in agent_rows})
     inventory = []
     for h in sorted(population):
-        hv = hosts[h]
+        hv = host_of(hosts, h)
         mine = [r for r in agent_rows if r["src"] == h]
         users = Counter(r["user"] for r in mine if r["user"])
         inventory.append({
@@ -404,7 +448,7 @@ def analyse(rows, hosts, pop_pairs, args):
 
     risk_contradictions = []
     for inv in inventory:
-        rl = hosts[inv["endpoint"]]["labels"].get("risk", "")
+        rl = host_of(hosts, inv["endpoint"])["labels"].get("risk", "")
         if rl and "low" in rl.lower() and (inv["regulated"] or inv["admin"]):
             risk_contradictions.append({"endpoint": inv["endpoint"], "risk_label": rl,
                                         "regulated": inv["regulated"], "admin": inv["admin"]})
@@ -449,6 +493,21 @@ def analyse(rows, hosts, pop_pairs, args):
         "risk_label_contradictions": risk_contradictions,
         "inventory": inventory,
     }
+    # Report destinations the flow data named but the workload inventory did not
+    # contain. Silence here would be the wrong kind of robustness: a reader needs
+    # to know that some destinations could not be label-resolved, because it
+    # bounds how complete the app and regulated-scope findings are.
+    if MISSING_HOSTS:
+        summary["inventory_gaps"] = {
+            "hosts_not_in_inventory": len(MISSING_HOSTS),
+            "examples": sorted(MISSING_HOSTS)[:10],
+            "note": ("These destinations appeared in flow data but not in the "
+                     "fetched workload inventory, so they carry no labels here. "
+                     "Usually unmanaged, out of the queried scope, or deleted "
+                     "between the two queries. Findings that depend on labels "
+                     "exclude them."),
+        }
+
     return summary, internal, egress
 
 
@@ -509,7 +568,7 @@ def write_csv(path: Path, rows, hosts, keep):
         w.writeheader()
         for r in sorted(rows, key=lambda r: (-r["connections"], r["src"], r["dst"])):
             out = dict(r)
-            out["src_labels"] = fmt_labels(defining(hosts[r["src"]]["labels"], keep))
+            out["src_labels"] = fmt_labels(defining(host_of(hosts, r["src"])["labels"], keep))
             out["dst_labels"] = fmt_labels(r.get("dst_labels", {}))
             w.writerow(out)
 
@@ -518,15 +577,15 @@ def write_sankey(path: Path, internal, hosts, keep, args):
     raw, host_out, app_out = [], {}, {}
     reg_env_re = re.compile(args.regulated_env, re.IGNORECASE)
     for r in sorted(internal, key=lambda r: (agent_sort_key(r["agent"]), -r["connections"])):
-        raw.append({"src": r["src"], "user": r["user"], "kind": host_kind(hosts[r["src"]], args.kind_label),
+        raw.append({"src": r["src"], "user": r["user"], "kind": host_kind(host_of(hosts, r["src"]), args.kind_label),
                     "agent": r["agent"], "dst": r["dst_host"], "app": r["app"], "port": r["port"],
                     "proto": r["proto"], "connections": r["connections"], "policy": r["policy"]})
-        s = hosts[r["src"]]
+        s = host_of(hosts, r["src"])
         host_out.setdefault(r["src"], {"kind": host_kind(s, args.kind_label), "user": r["user"],
                                        "labels": defining(s["labels"], keep)})
         if r["user"] and not host_out[r["src"]]["user"]:
             host_out[r["src"]]["user"] = r["user"]
-        d = hosts[r["dst_host"]]
+        d = host_of(hosts, r["dst_host"])
         host_out.setdefault(r["dst_host"], {"kind": "server", "labels": defining(d["labels"], keep)})
         app_out.setdefault(r["app"], {
             "bu": d["labels"].get("bu", ""), "env": d["labels"].get("env", ""),
