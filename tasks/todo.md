@@ -53,3 +53,47 @@ worked example (org 5636114) was not reproduced against the live PCE.
 
 Deviation from the spec: Step 2 uses `compact` instead of `labels_only`
 (reason above); the script splices the Sankey instead of a manual paste.
+
+# illumio-app-profile skill — GitHub issue #1 (2026-10-13)
+
+Branch `app-profile-skill`, PR closes #1.
+
+## Plan
+
+- [x] Verify tool shapes in illumio-mcp-server: traffic summary totals, sub-day
+      timestamps, workload/ruleset `labels` encoding, VEN fields, ruleset actor
+      string format (Explore subagent)
+- [x] `SKILL.md` — triggers, read-only constraint, gentle-on-PCE rules,
+      workflow steps 0 to 6, direction option, timeline opt-in question,
+      findings, verification, known gaps
+- [x] `references/findings-rubric.md` — finding definitions, spike rule
+      (≥ 3× median of non-zero buckets), candidate-rule construction
+- [x] `references/profile-template.md` — profile skeleton
+- [x] ~~scripts~~ dropped on the user's instruction: MCP tools only, no local
+      helpers; missing capabilities filed as illumio-mcp-server #43, #44, #45
+- [x] Cold-read test by a fresh agent
+- [x] README entry, package.sh picks it up automatically
+- [ ] Commit, push branch, open PR that closes #1
+
+## Review (2026-10-13)
+
+Built `illumio-app-profile/` with SKILL.md, references/findings-rubric.md and
+references/profile-template.md. MCP tools only, per the user's mid-task
+instruction; the two helper scripts written first were deleted.
+
+Verified:
+- Tool shapes read from the illumio-mcp-server source: summary tool caps at
+  200k with `totals.truncated` (not `flows_truncated`); full timestamps pass
+  through; `get-workloads` `labels` takes one key=value string; `get-rulesets`
+  passes `labels` raw, reads draft only, returns dataclass-repr actors.
+- Cold-read by a fresh agent: 12 scenarios answered from the files; its
+  findings (query budget, scope-plus-actor matching, `ams` versus unmanaged
+  peers, intra-app table handling, timeline boundaries, candidate table
+  columns) were applied.
+- package.sh builds dist/illumio-app-profile.zip.
+
+Filed on alexgoller/illumio-mcp-server: #43 get-traffic-timeline, #44 VEN
+columns in compact, #45 get-rulesets filters and readable actors.
+
+Not verified: no illumio-mcp tools were connected in this session, so the
+skill was not run against a live PCE.

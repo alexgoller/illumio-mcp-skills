@@ -103,3 +103,27 @@ Runs an end-to-end agentic AI security and risk assessment against an Illumio PC
 - Process egress discovery
 - Workload enforcement status, rulesets, draft versus active comparison, enforcement readiness
 
+### illumio-app-profile
+
+**Directory:** `illumio-app-profile/`
+
+Answers "tell me everything about app X" for one application identified by labels (for example `app=shop, env=prod`): its workloads and VEN health, inbound and outbound traffic by peer and service with policy decisions, the draft policy that matches it, blocked flows over time with spike detection, and candidate allow rules as suggestions. Read-only: it never creates or provisions policy. Built from issue #1.
+
+**Triggers:** tell me everything about app X, app profile, what does app X talk to, who talks to app X, is app X ready for enforcement, what is being blocked for app X.
+
+**Prerequisites:**
+- The **illumio-mcp** MCP server must be connected with a healthy PCE connection
+
+**Layout:**
+- `SKILL.md` — workflow mapped to illumio-mcp tools, PCE-load rules, timeline cost question, verification, known server gaps
+- `references/findings-rubric.md` — findings F0 to F9, the spike rule shared with illumio-tui, candidate-rule construction
+- `references/profile-template.md` — profile skeleton
+
+**Data Sources (via illumio-mcp):**
+- Labels and the app's workloads (`full` detail for VEN health)
+- Traffic flows grouped by peer and service, plus traffic summaries, per direction
+- Rulesets (scope match and client-side actor match), draft versus active comparison
+- Per-bucket traffic summaries for the blocked-flow timeline (opt-in, cost stated first)
+
+Server gaps that would simplify this skill are filed as illumio-mcp-server issues #43, #44 and #45.
+
