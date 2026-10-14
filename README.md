@@ -41,6 +41,20 @@ Generates a comprehensive Illumio PCE security assessment report as a branded `.
 
 The report is styled with Illumio brand colors and saved as a `.docx` file.
 
+### illumio-app-profile
+
+**Directory:** `illumio-app-profile/`
+
+Everything about one application, identified by labels (`app=shop, env=prod`): inbound and outbound traffic by peer and service, workloads with enforcement mode and VEN health, the policy that matches the app from draft or active, blocked flows over time with spikes, and findings with candidate (never provisioned) allow rules.
+
+**Triggers:** tell me everything about app X, app profile, what does app X talk to, who talks to app X, is app X ready for enforcement, what is being blocked for app X.
+
+**Prerequisites:**
+- The **illumio-mcp** MCP server, **0.10.0 or later** (`get-traffic-timeline`, VEN health in compact workloads, `get-rulesets` `pversion`/`actor_labels`); older servers work at the cost of one query per timeline bucket
+- Read-only: drafts rules as text or a `create-ruleset` call plan, never calls them
+
+**Steps:** connection → labels → workloads (one unfiltered compact call, reused for peer lookup) → traffic summary per direction → rulesets scoped to and naming the app → blocked timeline with spikes → `scripts/app_profile.py` merges and writes the findings → profile.
+
 ### illumio-security-dashboard
 
 **Directory:** `illumio-security-dashboard-skill/`
@@ -103,3 +117,28 @@ Runs an end-to-end agentic AI security and risk assessment against an Illumio PC
 - Process egress discovery
 - Workload enforcement status, rulesets, draft versus active comparison, enforcement readiness
 
+
+### illumio-unknown-endpoints
+
+**Directory:** `illumio-unknown-endpoints/`
+
+Finds the addresses in PCE traffic that the PCE does not know at all, neither as a managed workload nor as an unmanaged workload, profiles what each one does, and suggests the inventory and policy objects that would name it. Read-only; illumio-mcp tools only, no helper scripts.
+
+**Triggers:** unknown IPs, rogue hosts, rogue IP addresses, unmapped or uninventoried endpoints, what is talking to my workloads that is not a workload, hosts without a VEN, inventory gaps, scanners hitting workloads, unknown sources allowed into enforced workloads, unknown external destinations.
+
+**Prerequisites:**
+- The **illumio-mcp** MCP server must be connected with a healthy PCE connection
+
+**Outputs:**
+- A report: scope line with the query count and truncation, summary counts, findings U1 to U10 (host inside a managed subnet, scanner, admin-port reach, allowed into enforced workloads, uninventoried infrastructure, public source, notable public destination, no IP-list object, volume outlier, unverified policy mix), unknown sources and destinations tables with address class, IP-list coverage, subnet neighbourhood, peers, ports, policy mix and profile shape, and suggested `create-workload` / `create-iplist` / `create-deny-rule` objects that are never executed
+- An opt-in deep dive per endpoint: peer x port x policy table and a spike-marked timeline
+
+**Layout:**
+- `SKILL.md` — definitions, workflow Steps 0 to 8, PCE budget (5 queries), verification checklist, server gaps, common mistakes
+- `references/findings-rubric.md` — endpoint classes, profile shapes, findings U1 to U10, suggestion rules
+- `references/report-template.md` — report skeleton
+
+**Data Sources (via illumio-mcp):**
+- Workload inventory (compact, with interface addresses and managed flag) and IP lists
+- Traffic summary (external destinations, blocked, app-to-app), unmanaged-traffic scan filtered against the inventory, process egress
+- Per-endpoint grouped flows and timeline (waits on illumio-mcp-server#47)
