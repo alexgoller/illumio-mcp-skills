@@ -66,4 +66,4 @@ follow-up before merge.
 - [x] `.github/workflows/package.yml`: build zips on push/PR, layout check, artifact, release assets on `v*` tags
 - [x] README: installing a skill, releasing
 - [x] Local run of package.sh plus the layout check: 6 zips ok
-- [ ] CI green on the PR (verified after push)
+- [x] CI green on the PR: run 38693631703, all steps passed, artifact `skills` uploaded
