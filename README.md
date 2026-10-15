@@ -2,6 +2,23 @@
 
 Skills building on the Illumio MCP server for Illumio Segmentation.
 
+## Installing a skill
+
+Every skill ships as one zip, `<skill-name>.zip`, holding a single folder with `SKILL.md` inside. Get it from the latest [GitHub release](https://github.com/alexgoller/illumio-mcp-skills/releases), or build it locally with `./package.sh` (writes `dist/`).
+
+- **claude.ai**: Settings > Capabilities > Skills > upload the zip.
+- **Claude Code**: `claude --plugin-dir /path/to/<skill-name>.zip`, or unzip it into your skills directory.
+
+All skills need the [illumio-mcp](https://github.com/alexgoller/illumio-mcp-server) MCP server connected to a PCE.
+
+## Releasing
+
+The `Package skills` workflow runs `package.sh` on every push and pull request and keeps the zips as a workflow artifact, so a broken skill layout fails the build. Pushing a tag `vX.Y.Z` creates a GitHub release with every zip attached:
+
+```
+git tag v1.0.0 && git push origin v1.0.0
+```
+
 ## Skills
 
 ### illumio-pce-assessment

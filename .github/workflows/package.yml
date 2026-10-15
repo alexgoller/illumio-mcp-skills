@@ -1,0 +1,51 @@
+name: Package skills
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build one zip per skill
+        run: ./package.sh
+
+      - name: Check each zip has one top-level folder with SKILL.md
+        run: |
+          set -euo pipefail
+          for z in dist/*.zip; do
+            name=$(basename "$z" .zip)
+            tops=$(unzip -Z1 "$z" | cut -d/ -f1 | sort -u)
+            [ "$tops" = "$name" ] || { echo "$z: top-level entries '$tops' != '$name'"; exit 1; }
+            unzip -Z1 "$z" | grep -qx "$name/SKILL.md" || { echo "$z: missing $name/SKILL.md"; exit 1; }
+            echo "ok $z"
+          done
+
+      - name: Upload zips as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: skills
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Attach zips to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=${GITHUB_REF_NAME}
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/*.zip --clobber
+          else
+            gh release create "$tag" dist/*.zip --title "$tag" --generate-notes
+          fi

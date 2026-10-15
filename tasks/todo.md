@@ -60,3 +60,10 @@ against a live PCE.
 Also found: illumio-mcp-server shipped #43 to #45 on 2026-10-13, so the
 workarounds in the open app-profile PR (#2) are obsolete; that PR needs a
 follow-up before merge.
+
+# Release pipeline (2026-10-15)
+
+- [x] `.github/workflows/package.yml`: build zips on push/PR, layout check, artifact, release assets on `v*` tags
+- [x] README: installing a skill, releasing
+- [x] Local run of package.sh plus the layout check: 6 zips ok
+- [x] CI green on the PR: run 38693631703, all steps passed, artifact `skills` uploaded
