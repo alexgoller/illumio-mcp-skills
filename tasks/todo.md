@@ -77,7 +77,7 @@ Request: "the skill needs to create a similar styled dashboard as the other skil
 - [x] `references/dashboard-example.jsx`: working example with synthetic data
 - [x] SKILL.md Step 9, Files table, frontmatter triggers, verification item; README outputs and layout
 - [x] Verify: esbuild bundle + headless Chrome, every tab clicked, zero console errors, expected content found, three screenshots inspected
-- [ ] PR opened, CI green
+- [x] PR #5 opened, CI green
 
 ## Review
 
