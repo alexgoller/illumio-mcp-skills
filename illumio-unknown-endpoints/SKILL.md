@@ -1,6 +1,6 @@
 ---
 name: illumio-unknown-endpoints
-description: "Use when the user asks about IP addresses in Illumio PCE traffic that are not workloads: unknown IPs, rogue hosts, rogue IP addresses, unmapped or uninventoried endpoints, what is talking to my workloads that is not a workload, hosts without a VEN, inventory gaps, scanners hitting workloads, unknown sources allowed into enforced workloads, unknown external destinations. Finds endpoints that are neither managed nor unmanaged workloads, profiles their traffic (scanner, fan-in server, admin-port reach, high volume), and suggests inventory and policy objects without creating them. Not for one application (illumio-app-profile), estate assessments (illumio-pce-assessment) or AI egress (illumio-agentic-ai-risk-assessment). Requires the illumio-mcp MCP server."
+description: "Use when the user asks about IP addresses in Illumio PCE traffic that are not workloads: unknown IPs, rogue hosts, rogue IP addresses, unmapped or uninventoried endpoints, what is talking to my workloads that is not a workload, hosts without a VEN, inventory gaps, scanners hitting workloads, unknown sources allowed into enforced workloads, unknown external destinations. Also for an unknown-endpoints dashboard, rogue IP dashboard, interactive view of unknown IPs, or inventory gap dashboard. Finds endpoints that are neither managed nor unmanaged workloads, profiles their traffic (scanner, fan-in server, admin-port reach, high volume), writes a report and a single-file React dashboard in the Illumio style, and suggests inventory and policy objects without creating them. Not for one application (illumio-app-profile), estate assessments (illumio-pce-assessment) or AI egress (illumio-agentic-ai-risk-assessment). Requires the illumio-mcp MCP server."
 ---
 
 # Illumio Unknown Endpoints
@@ -12,7 +12,8 @@ which workloads and apps it reaches or serves, on which ports, whether
 policy allows it, and whether its traffic profile is remarkable (a scanner,
 a shared infrastructure host, an admin-port reach, a volume outlier). The
 output is a short report with findings U1 to U10 and suggested inventory
-and policy objects.
+and policy objects, plus a single-file React dashboard in the same style
+as the other Illumio dashboard skills, built from the report's numbers.
 
 Everything comes from illumio-mcp tool calls; the analysis is done on the
 tool results. Where a tool is missing or wrong, the workaround is given and
@@ -32,6 +33,8 @@ run the tool directly.
 | --- | --- |
 | `references/findings-rubric.md` | what "unknown" means, address classes, profile shapes, findings U1 to U10, suggestion rules |
 | `references/report-template.md` | the report skeleton |
+| `references/dashboard-spec.md` | the React dashboard: palette, data constants, tabs, components, checklist |
+| `references/dashboard-example.jsx` | a rendered, working example of the dashboard with synthetic data; copy its components, replace the data block |
 
 ## Definitions
 
@@ -108,7 +111,9 @@ Keep a running tally of calls; the scope line states it.
 
 ## Workflow
 
-Use a task list with one item per step plus the verification task.
+Use a task list with one item per step plus the verification task. The
+report (Step 8) is written first and the dashboard (Step 9) is built from
+it, so the two never disagree.
 
 ### Step 0: Connection
 
@@ -311,6 +316,20 @@ They are labelled as suggestions, written as `create-workload` /
 `create-iplist` call plans in a code block when the user asks for one, and
 never executed.
 
+### Step 9: Dashboard
+
+Build the React artifact described in `references/dashboard-spec.md` from
+the report, starting from `references/dashboard-example.jsx` (keep its
+components, replace everything between `// ==== DATA ====` and
+`// ==== END DATA ====`): same palette and components as illumio-security-dashboard and
+illumio-daily-assessment (DM Sans, pill tabs, inline styles, `app (env)`
+tuples), data embedded as constants, six tabs (Overview, Findings, Unknown
+sources, Unknown destinations, Subnets, Suggestions) and a Deep dive tab
+only when Step 7 ran. Every number on it is copied from the report; the
+dashboard never computes a finding the report does not have. Save it as
+`illumio_unknown_endpoints_<YYYY-MM-DD>.jsx` and present it with the
+report. Skip the dashboard only when the user asked for text only.
+
 ## Verification (before publishing)
 
 - [ ] Every address in the unknown tables is absent from the Step 1 known IP set, or the scope line says the inventory was truncated and the findings carry "possibly known:"
@@ -322,6 +341,7 @@ never executed.
 - [ ] The default IP list is not cited as coverage anywhere
 - [ ] The deep dive section exists only if the user approved the stated count
 - [ ] No write tool was called
+- [ ] The dashboard's KPIs, table rows and banner colour match the report; it was built from the report, not from the raw tool results
 
 ## Known gaps in illumio-mcp-server
 

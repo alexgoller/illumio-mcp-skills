@@ -67,3 +67,18 @@ follow-up before merge.
 - [x] README: installing a skill, releasing
 - [x] Local run of package.sh plus the layout check: 6 zips ok
 - [x] CI green on the PR: run 38693631703, all steps passed, artifact `skills` uploaded
+
+# Dashboard for illumio-unknown-endpoints (2026-10-15)
+
+Request: "the skill needs to create a similar styled dashboard as the other skills in here".
+
+- [x] Read the dashboard conventions of illumio-daily-assessment and illumio-security-dashboard (React .jsx, inline styles, Illumio palette C, DM Sans, pill TabBar, KPICard, Badge, DataTable, app (env) tuples, /mnt/user-data/outputs path, checklist)
+- [x] `references/dashboard-spec.md`: palette and status colours, data constants, banner rule, 6 tabs + conditional Deep dive, components, empty states, output, checklist
+- [x] `references/dashboard-example.jsx`: working example with synthetic data
+- [x] SKILL.md Step 9, Files table, frontmatter triggers, verification item; README outputs and layout
+- [x] Verify: esbuild bundle + headless Chrome, every tab clicked, zero console errors, expected content found, three screenshots inspected
+- [ ] PR opened, CI green
+
+## Review
+
+Rendered at 1280px: Overview (banner, 8 KPIs, severity bar, top issues), Unknown sources (chips, search, admin ports in red, policy bars with "partial"), Deep dive (stacked policy bars, 3x-median line, spike outlined, worst spike labelled). All seven tabs clicked in headless Chrome with no window errors. The example is 540 lines; it ships inside the skill so the dashboard is reproducible instead of re-derived from prose each run.

@@ -125,6 +125,8 @@ Runs an end-to-end agentic AI security and risk assessment against an Illumio PC
 - `references/agent-catalog.md` — process names, matching rules, vendor egress hints
 - `references/risk-rubric.md` — scoring and regulatory mapping
 - `references/report-template.md` — report skeleton
+- `references/dashboard-spec.md` — React dashboard: palette, data constants, tabs, components, checklist
+- `references/dashboard-example.jsx` — working example of the dashboard with synthetic data
 - `references/sankey-template.html` — the reach diagram (d3 + d3-sankey)
 - `scripts/aggregate_flows.py` — merges sliced `get-traffic-flows` results into one flow table and emits the Sankey data
 
@@ -147,6 +149,7 @@ Finds the addresses in PCE traffic that the PCE does not know at all, neither as
 - The **illumio-mcp** MCP server must be connected with a healthy PCE connection
 
 **Outputs:**
+- A single-file React dashboard in the same Illumio style as the other dashboard skills: health banner, KPI cards, findings, unknown sources and destinations tables with policy bars, a subnets view of inventory gaps, suggestions, and a deep-dive timeline when run
 - A report: scope line with the query count and truncation, summary counts, findings U1 to U10 (host inside a managed subnet, scanner, admin-port reach, allowed into enforced workloads, uninventoried infrastructure, public source, notable public destination, no IP-list object, volume outlier, unverified policy mix), unknown sources and destinations tables with address class, IP-list coverage, subnet neighbourhood, peers, ports, policy mix and profile shape, and suggested `create-workload` / `create-iplist` / `create-deny-rule` objects that are never executed
 - An opt-in deep dive per endpoint: peer x port x policy table and a spike-marked timeline
 
