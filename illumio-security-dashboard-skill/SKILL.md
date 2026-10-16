@@ -142,6 +142,14 @@ Apply consistently everywhere (badges, cells, backgrounds):
 - **low / pass / enforced**: Green (`00C48C`) bg, white text
 - **info / in progress**: Teal (`00B4D8`) bg, white text
 
+### Colour legends (required)
+
+Colour carries meaning only, and every place it is used explains itself:
+- A **colour key** next to the tab bar on every tab: critical / fail / high risk, high, medium / warning, low / pass / enforced, info / in progress, plus the sentence "grey borders and strips mean nothing".
+- A **`Legend` component** (swatch plus text) at the bottom of every section that uses colour, listing exactly the colours used there: the enforcement donut segments; graph node fill by tier and the red override for bridge nodes; link colour by risk level and width for high risk; lateral movement bar fills (bridge, high reachability, low) and the BRIDGE badge; port card severities; violation row tints; unmanaged traffic anomaly colours.
+- Section heading accents are one neutral grey; no per-section colour.
+- Keep the legend wording in one `LEGEND` constant so every tab says the same thing.
+
 ### Tab Structure
 
 Use a pill-style tab bar with 5 tabs:
@@ -240,5 +248,6 @@ Before finalizing, verify:
 - [ ] Risk filter buttons work and dim non-matching content
 - [ ] Donut chart segments add up to total workloads
 - [ ] All status badges use correct color mapping
+- [ ] Colour key visible on every tab; every section that uses colour ends with a legend naming each colour, tint and badge
 - [ ] Tab switching works without losing state
 - [ ] No separate env columns anywhere — env is always part of the app tuple
