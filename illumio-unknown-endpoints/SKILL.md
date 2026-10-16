@@ -326,7 +326,10 @@ illumio-daily-assessment (DM Sans, pill tabs, inline styles, `app (env)`
 tuples), data embedded as constants, six tabs (Overview, Findings, Unknown
 sources, Unknown destinations, Subnets, Suggestions) and a Deep dive tab
 only when Step 7 ran. Every number on it is copied from the report; the
-dashboard never computes a finding the report does not have. Save it as
+dashboard never computes a finding the report does not have. Colour is
+used only for meaning, and every section that uses colour, bold or a tint
+ends with a legend naming each one; the report's tables carry the same
+legend line. Save it as
 `illumio_unknown_endpoints_<YYYY-MM-DD>.jsx` and present it with the
 report. Skip the dashboard only when the user asked for text only.
 

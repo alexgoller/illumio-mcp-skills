@@ -82,3 +82,12 @@ Request: "the skill needs to create a similar styled dashboard as the other skil
 ## Review
 
 Rendered at 1280px: Overview (banner, 8 KPIs, severity bar, top issues), Unknown sources (chips, search, admin ports in red, policy bars with "partial"), Deep dive (stacked policy bars, 3x-median line, spike outlined, worst spike labelled). All seven tabs clicked in headless Chrome with no window errors. The example is 540 lines; it ships inside the skill so the dashboard is reproducible instead of re-derived from prose each run.
+
+# Colour legends across skills (2026-10-16)
+
+- [x] unknown-endpoints dashboard: neutral section strips, attention-based KPI borders, severity-coloured subnet bars, ColourKey on every tab, Legend in every section, LEGEND constant; report template legend line; spec and checklist
+- [x] pce-assessment (docx): legend row under status-cell tables, KPI tile caption, colour check
+- [x] security-dashboard and daily-assessment: colour key + per-section Legend requirement, neutral accents, checklist items
+- [x] agentic-ai: Sankey legend lists every agent in its ribbon colour (dynamic, "other" grouped); report template stacked bar needs a legend
+- [x] README convention
+- [x] Verified: dashboard example re-rendered, 7 tabs, 0 errors, legend present in every section; Sankey template rendered, legend shows Cursor, ChatGPT, Claude, Codex

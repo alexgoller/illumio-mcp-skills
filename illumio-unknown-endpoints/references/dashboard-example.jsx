@@ -158,9 +158,12 @@ function Badge({ label, color, bg, mono }) {
 const SeverityBadge = ({ s }) => <Badge label={s.toUpperCase()} {...(sev[s] || sev.info)} />;
 const ClassChip = ({ c }) => <Badge label={c} {...(classChip[c] || classChip.noise)} />;
 
-function KPICard({ label, value, subtitle, accent }) {
+// attention: "high" | "medium" | undefined. The top border is red or orange
+// only when the value is non-zero and the KPI is a risk; grey otherwise.
+function KPICard({ label, value, subtitle, attention }) {
+  const border = value > 0 && attention === "high" ? C.red : value > 0 && attention === "medium" ? C.orange : C.gray300;
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: "14px 16px", borderTop: `4px solid ${accent || C.green}`, minWidth: 0 }}>
+    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: "14px 16px", borderTop: `4px solid ${border}`, minWidth: 0 }}>
       <div style={{ fontSize: 12, color: C.gray500, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 30, fontWeight: 800, color: C.navy, lineHeight: 1.2, marginTop: 4 }}>{fmt(value)}</div>
       {subtitle && <div style={{ fontSize: 12, color: C.gray500, marginTop: 2 }}>{subtitle}</div>}
@@ -182,6 +185,56 @@ function StatusBanner({ status, title, subtitle }) {
   );
 }
 
+// Swatch + text, used by every Legend. kind: "fill" (box), "text" (coloured
+// bold text), "outline" (box outline), "dash" (dashed line).
+function Swatch({ color, kind }) {
+  if (kind === "text") return <span style={{ color, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>22/tcp</span>;
+  if (kind === "outline") return <span style={{ display: "inline-block", width: 14, height: 10, border: `2px solid ${color}`, borderRadius: 2 }} />;
+  if (kind === "dash") return <span style={{ display: "inline-block", width: 18, borderTop: `2px dashed ${color}` }} />;
+  return <span style={{ display: "inline-block", width: 14, height: 10, background: color, borderRadius: 2 }} />;
+}
+
+// A legend sits inside every section that uses colour, listing exactly the
+// colours used there and what each means.
+function Legend({ items }) {
+  return (
+    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: C.gray500, marginTop: 10,
+      paddingTop: 8, borderTop: `1px dashed ${C.gray200}` }}>
+      <span style={{ fontWeight: 700 }}>Legend</span>
+      {items.map(([label, color, kind], i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={color} kind={kind} />{label}</span>
+      ))}
+    </div>
+  );
+}
+
+const LEGEND = {
+  severity: [["high finding", C.red], ["medium finding", C.orange], ["low finding", C.amber]],
+  policy: [["allowed", C.green], ["potentially blocked", C.orange], ["blocked", C.red], ["partial = mix unverified, summary was capped", C.amber]],
+  rows: [["row tint: endpoint has a high finding", C.redLight], ["row tint: medium finding", C.orangeLight], ["no tint: low or none", C.white]],
+  ports: [["port in red bold = admin port (22, 3389, 445, 1433 ...)", C.red, "text"], ["black = other port", C.navy, "text"]],
+  classes: [["private address", C.tealLight], ["public address", C.orangeLight], ["noise class", C.gray100]],
+  findingsBadge: [["finding badge colour = that finding's severity", C.red]],
+  subnets: [["bar colour = worst finding among the subnet's unknown hosts", C.red], ["medium", C.orange], ["low", C.amber]],
+  timeline: [["allowed", C.green], ["potentially blocked", C.orange], ["blocked", C.red], ["spike bucket (>= 3x median)", C.red, "outline"], ["3x median threshold", C.red, "dash"]],
+  suggestions: [["create-workload", C.teal], ["create-iplist", C.green], ["create-deny-rule", C.red], ["VEN", C.navy], ["narrow a rule", C.orange]],
+};
+
+// Global key next to the tab bar: the colours that recur on every tab.
+function ColourKey() {
+  const items = [
+    ["high · blocked", C.red, C.white], ["medium · potentially blocked", C.orange, C.white],
+    ["low", C.amber, C.amberDark], ["allowed · ok", C.green, C.white], ["info", C.teal, C.white],
+  ];
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: C.gray500 }}>
+      <span style={{ fontWeight: 700, marginRight: 2 }}>Colour key</span>
+      {items.map(([l, bg, color]) => <Badge key={l} label={l} bg={bg} color={color} />)}
+      <span>· grey strips and borders mean nothing · each section has its own legend</span>
+    </div>
+  );
+}
+
 function TabBar({ tabs, active, onChange }) {
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: C.gray100, padding: 6, borderRadius: 999, width: "fit-content" }}>
@@ -195,12 +248,15 @@ function TabBar({ tabs, active, onChange }) {
   );
 }
 
-function Section({ title, accent, children, right }) {
+// Colour carries meaning only (severity, policy decision, address class).
+// Section headings all use the same neutral strip so nobody reads a
+// difference into them.
+function Section({ title, children, right }) {
   return (
     <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: 16, marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ width: 4, height: 18, borderRadius: 2, background: accent || C.green, display: "inline-block" }} />
+          <span style={{ width: 4, height: 18, borderRadius: 2, background: C.gray300, display: "inline-block" }} />
           <span style={{ fontWeight: 800, color: C.navy, fontSize: 15 }}>{title}</span>
         </div>
         {right}
@@ -299,7 +355,7 @@ function BarList({ items, onPick, picked }) {
             <span>{i.label}</span><span style={{ color: C.gray500 }}>{i.value}</span>
           </div>
           <div style={{ height: 10, background: C.gray100, borderRadius: 5, overflow: "hidden" }}>
-            <div style={{ width: `${(100 * i.value) / max}%`, height: "100%", background: `linear-gradient(90deg, ${C.orange}, ${C.red})` }} />
+            <div style={{ width: `${(100 * i.value) / max}%`, height: "100%", background: i.color || C.red }} />
           </div>
         </div>
       ))}
@@ -402,6 +458,7 @@ function EndpointTab({ rows, isDst }) {
       </div>
       <DataTable columns={endpointColumns(isDst)} rows={[...filtered].sort((a, b) => b.connections - a.connections)} rowTint={rowTint}
         search={search} setSearch={setSearch} empty={`No unknown ${isDst ? "destinations" : "sources"} in this window`} />
+      <Legend items={[...LEGEND.rows, ...LEGEND.ports, ...LEGEND.policy, ...LEGEND.classes, ...LEGEND.findingsBadge]} />
       {isDst && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontWeight: 700, color: C.navy, fontSize: 13 }}>Collapsed ranges <span style={{ color: C.gray500, fontWeight: 400 }}>(ranges, not hosts, not in the counts)</span></div>
@@ -422,18 +479,18 @@ function Overview({ status }) {
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 16 }}>
-        <KPICard label="Unknown sources" value={summaryKPIs.unknownSources} accent={C.orange} />
-        <KPICard label="Unknown destinations" value={summaryKPIs.unknownDestinations} accent={C.teal} />
-        <KPICard label="Inside managed subnets" value={summaryKPIs.insideManagedSubnet} subtitle="likely missing VENs" accent={C.red} />
-        <KPICard label="Allowed into enforced" value={summaryKPIs.allowedIntoEnforced} subtitle="sources admitted by a rule" accent={C.red} />
+        <KPICard label="Unknown sources" value={summaryKPIs.unknownSources} />
+        <KPICard label="Unknown destinations" value={summaryKPIs.unknownDestinations} />
+        <KPICard label="Inside managed subnets" value={summaryKPIs.insideManagedSubnet} subtitle="likely missing VENs" attention="high" />
+        <KPICard label="Allowed into enforced" value={summaryKPIs.allowedIntoEnforced} subtitle="sources admitted by a rule" attention="high" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 12 }}>
-        <KPICard label="Scanners" value={summaryKPIs.scanners} accent={C.red} />
-        <KPICard label="Public sources" value={summaryKPIs.publicSources} accent={C.orange} />
-        <KPICard label="Covered by named IP list" value={summaryKPIs.coveredByNamedList} subtitle="known range, not inventoried" accent={C.green} />
-        <KPICard label="Noise endpoints" value={summaryKPIs.noiseEndpoints} subtitle="link-local, multicast, broadcast" accent={C.gray400} />
+        <KPICard label="Scanners" value={summaryKPIs.scanners} attention="high" />
+        <KPICard label="Public sources" value={summaryKPIs.publicSources} attention="medium" />
+        <KPICard label="Covered by named IP list" value={summaryKPIs.coveredByNamedList} subtitle="known range, not inventoried" />
+        <KPICard label="Noise endpoints" value={summaryKPIs.noiseEndpoints} subtitle="link-local, multicast, broadcast" />
       </div>
-      <Section title="Findings by severity" accent={C.navy}>
+      <Section title="Findings by severity">
         <div style={{ display: "flex", height: 14, borderRadius: 7, overflow: "hidden", background: C.gray100 }}>
           <div style={{ width: `${(100 * summaryKPIs.high) / total}%`, background: C.red }} />
           <div style={{ width: `${(100 * summaryKPIs.medium) / total}%`, background: C.orange }} />
@@ -445,8 +502,9 @@ function Overview({ status }) {
           <span><b style={{ color: C.amberDark }}>{summaryKPIs.low}</b> low</span>
           <span style={{ color: C.gray500 }}>{fmt(summaryKPIs.connectionsUnknown)} connections involve unknown endpoints</span>
         </div>
+        <Legend items={[...LEGEND.severity, ["KPI card top border: red or orange only when a risk KPI is above zero; grey otherwise", C.gray300]]} />
       </Section>
-      <Section title="Top issues" accent={C.red}>
+      <Section title="Top issues">
         {top.length ? top.map((f, i) => (
           <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "8px 0", borderBottom: i < top.length - 1 ? `1px solid ${C.gray100}` : "none" }}>
             <SeverityBadge s={f.severity} />
@@ -456,6 +514,7 @@ function Overview({ status }) {
             </div>
           </div>
         )) : <div style={{ color: C.gray500, fontSize: 13 }}>No findings in this window</div>}
+        <Legend items={LEGEND.severity} />
       </Section>
       <div style={{ color: C.gray500, fontSize: 12, marginTop: 14, lineHeight: 1.5 }}>
         Appendix: {summaryKPIs.noiseEndpoints} noise endpoints counted, connections dropped from every total; {summaryKPIs.unlabelledWorkloads} unlabelled
@@ -472,7 +531,7 @@ function FindingsTab() {
   const ids = [...new Set(findings.map((f) => f.id))].sort();
   const rows = findings.filter((f) => (!sevF || f.severity === sevF) && (!idF || f.id === idF));
   return (
-    <Section title="Findings" accent={C.red} right={<span style={{ color: C.gray500, fontSize: 12 }}>{rows.length} of {findings.length}</span>}>
+    <Section title="Findings" right={<span style={{ color: C.gray500, fontSize: 12 }}>{rows.length} of {findings.length}</span>}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
         {["high", "medium", "low"].map((s) => <Chip key={s} label={s} active={sevF === s} onClick={() => setSevF(sevF === s ? null : s)} />)}
         <span style={{ width: 8 }} />
@@ -499,17 +558,23 @@ function FindingsTab() {
           })}
         </div>
       ) : <div style={{ color: C.gray500, fontSize: 13 }}>No findings match</div>}
+      <Legend items={[["card left border and badge = finding severity: high", C.red], ["medium", C.orange], ["low", C.amber], ...LEGEND.classes]} />
     </Section>
   );
 }
 
 function SubnetsTab() {
   const [picked, setPicked] = useState(null);
-  const items = [...subnets].sort((a, b) => b.unknownCount - a.unknownCount).map((s) => ({
-    key: s.prefix, value: s.unknownCount, label: `${s.prefix} · ${s.managedCount} managed · ${s.unmanagedCount} unmanaged · ${s.unknownCount} unknown` }));
+  // Bar colour = worst finding severity among the subnet's unknown hosts.
+  const items = [...subnets].sort((a, b) => b.unknownCount - a.unknownCount).map((s) => {
+    const sevs = findings.filter((f) => s.unknownIps.includes(f.endpoint)).map((f) => f.severity);
+    const color = sevs.includes("high") ? C.red : sevs.includes("medium") ? C.orange : C.amber;
+    return { key: s.prefix, value: s.unknownCount, color,
+      label: `${s.prefix} · ${s.managedCount} managed · ${s.unmanagedCount} unmanaged · ${s.unknownCount} unknown` };
+  });
   const sel = subnets.find((s) => s.prefix === picked);
   return (
-    <Section title="Where the inventory gaps are" accent={C.orange} right={<span style={{ color: C.gray500, fontSize: 12 }}>managed prefixes with unknown hosts</span>}>
+    <Section title="Where the inventory gaps are" right={<span style={{ color: C.gray500, fontSize: 12 }}>managed prefixes with unknown hosts</span>}>
       {items.length ? <BarList items={items} onPick={setPicked} picked={picked} /> : <div style={{ color: C.gray500, fontSize: 13 }}>No unknown hosts inside managed subnets</div>}
       {sel && (
         <div style={{ marginTop: 14, background: C.gray50, borderRadius: 10, padding: 12 }}>
@@ -517,6 +582,7 @@ function SubnetsTab() {
           <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, color: C.navy, marginTop: 4 }}>{sel.unknownIps.join("  ")}</div>
         </div>
       )}
+      <Legend items={[...LEGEND.subnets, ["bar length = number of unknown hosts in the prefix; click a bar to list them", C.gray300]]} />
     </Section>
   );
 }
@@ -524,7 +590,7 @@ function SubnetsTab() {
 function SuggestionsTab() {
   const kindColor = { "create-workload": C.teal, "create-iplist": C.green, "create-deny-rule": C.red, ven: C.navy, "narrow-rule": C.orange };
   return (
-    <Section title="Suggested objects (not created)" accent={C.green}
+    <Section title="Suggested objects (not created)"
       right={<Badge label="NOTHING ON THIS TAB HAS BEEN EXECUTED" bg={C.amber} color={C.amberDark} />}>
       {suggestions.length ? (
         <div style={{ display: "grid", gap: 10 }}>
@@ -542,6 +608,7 @@ function SuggestionsTab() {
           ))}
         </div>
       ) : <div style={{ color: C.gray500, fontSize: 13 }}>No suggestions</div>}
+      <Legend items={[["kind badge:", C.white], ...LEGEND.suggestions]} />
     </Section>
   );
 }
@@ -551,7 +618,7 @@ function DeepDiveTab() {
   const pol = { allowed: sev.ok, potentially_blocked: sev.medium, blocked: sev.high };
   return (
     <div>
-      <Section title={`Deep dive: ${d.ip} as ${d.direction}`} accent={C.navy}
+      <Section title={`Deep dive: ${d.ip} as ${d.direction}`}
         right={<span style={{ fontSize: 12, color: C.gray500 }}>bucket {d.bucket} · effective {d.effectiveBucket}</span>}>
         {d.resolutionNote && <div style={{ background: C.amber, color: C.amberDark, borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 10 }}>{d.resolutionNote}</div>}
         <TimelineChart series={d.series} spikes={d.spikes} bucket={d.bucket} />
@@ -559,8 +626,9 @@ function DeepDiveTab() {
           {d.spikes.worst ? <span>Worst spike <b style={{ color: C.red }}>{d.spikes.worst.label}, {d.spikes.worst.multiple}x median</b> ({d.spikes.median} flows)</span> : "No spike"}
           {d.spikes.caveat && <div style={{ color: C.amberDark, marginTop: 4 }}>{d.spikes.caveat}</div>}
         </div>
+        <Legend items={LEGEND.timeline} />
       </Section>
-      <Section title="Peer x port x policy" accent={C.teal}>
+      <Section title="Peer x port x policy">
         <DataTable columns={[
           { key: "peer", label: "Peer" },
           { key: "port", label: "Port", render: (r) => <span style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{r.port}/{r.proto}</span> },
@@ -568,6 +636,7 @@ function DeepDiveTab() {
           { key: "connections", label: "Connections", render: (r) => fmt(r.connections) },
           { key: "process", label: "Process", render: (r) => r.process || "–" },
         ]} rows={d.peers} empty="No peers" />
+        <Legend items={LEGEND.policy.slice(0, 3)} />
       </Section>
     </div>
   );
@@ -593,7 +662,10 @@ export default function UnknownEndpointsDashboard() {
           <div style={{ fontSize: 12, color: C.gray500 }}>generated {scope.generatedAt}</div>
         </div>
         <StatusBanner status={status} title={title} subtitle={subtitle} />
-        <div style={{ marginTop: 14 }}><TabBar tabs={tabs} active={tab} onChange={setTab} /></div>
+        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <TabBar tabs={tabs} active={tab} onChange={setTab} />
+          <ColourKey />
+        </div>
         {tab === "Overview" && <Overview status={status} />}
         {tab === "Findings" && <FindingsTab />}
         {tab === "Unknown sources" && <EndpointTab rows={unknownSources} isDst={false} />}

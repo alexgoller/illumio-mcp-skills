@@ -247,6 +247,9 @@
     <div class="legend" id="legend">
       <span class="k"><span class="nd"></span>Endpoint or application</span>
       <span class="k"><span class="nd reg"></span><span class="flag-glyph">◆</span>Regulated application</span>
+      <span class="k">Ribbon and middle-column node colour = agent:</span>
+      <span id="legendAgents" style="display:contents"></span>
+      <span class="k">Ribbon width = connections</span>
       <span class="k" id="legendNote">Hover a ribbon for the hosts and ports behind it. Click a node to pin its paths.</span>
     </div>
   </section>
@@ -353,6 +356,29 @@ const agentsAll = [...new Set(RAW.map(r => r.agent))].sort(agentCmp);
 const agentSlot = new Map(agentsAll.map((a, i) => [a, i < 8 ? `--s${i + 1}` : "--other"]));
 const agentColor = (a) => `var(${agentSlot.get(a) || "--other"})`;
 const kindsAll = [...new Set(RAW.map(rowKind))].sort(kindCmp);
+
+// Legend: one swatch per agent in the colour the ribbons use, so a reader
+// never has to infer an agent from a hue. Agents beyond the eighth share the
+// neutral "other" tone and are named together.
+function buildLegend() {
+  const host = document.getElementById("legendAgents");
+  if (!host) return;
+  const other = [];
+  agentsAll.forEach(a => {
+    if (agentSlot.get(a) === "--other") { other.push(a); return; }
+    const k = document.createElement("span"); k.className = "k";
+    const sw = document.createElement("span"); sw.className = "nd"; sw.style.background = agentColor(a);
+    k.append(sw, document.createTextNode(a));
+    host.appendChild(k);
+  });
+  if (other.length) {
+    const k = document.createElement("span"); k.className = "k";
+    const sw = document.createElement("span"); sw.className = "nd"; sw.style.background = "var(--other)";
+    k.append(sw, document.createTextNode("other: " + other.join(", ")));
+    host.appendChild(k);
+  }
+}
+buildLegend();
 
 // ---- State --------------------------------------------------------------
 const state = { agents: new Set(agentsAll), kind: "all", regulatedOnly: false, sortKey: "connections", sortDir: "desc", pinned: null };

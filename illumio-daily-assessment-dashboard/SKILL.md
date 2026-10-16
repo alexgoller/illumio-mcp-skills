@@ -247,6 +247,14 @@ const C = {
 
 Use Google Fonts `DM Sans` (weights 400–800) loaded via `<link>` in the component body.
 
+### Colour legends (required)
+
+Colour carries meaning only, and every place it is used explains itself:
+- A **colour key** next to the tab bar on every tab: red critical / blocked, orange high / potentially blocked, amber medium / warning, green low / pass / online, teal info, plus "grey borders and strips mean nothing".
+- A **`Legend` component** (swatch plus text) at the bottom of every section that uses colour, listing exactly what is used there: the health banner colours and their thresholds; KPI card accents; blocked-traffic row tints (red blocked, amber potentially blocked); enforcement donut segments; OFFLINE badge; event timeline dots (red error, orange warning); exfiltration risk levels; blind-spot new-source badge.
+- Section heading accents are one neutral grey; KPI card accents are coloured only when the value calls for attention, grey otherwise.
+- Keep the legend wording in one `LEGEND` constant so every tab says the same thing.
+
 ### Overall Health Indicator
 
 At the very top of the dashboard, show a single large status indicator that summarizes everything:
@@ -364,3 +372,4 @@ Before finalizing, verify:
 - [ ] No empty state crashes — gracefully handle zero results for any section
 - [ ] Compliance score displays even if only "general" framework was used
 - [ ] Top Issues list on Overview pulls the most urgent items from all categories
+- [ ] Colour key visible on every tab; every section that uses colour ends with a legend naming each colour, tint, dot and badge

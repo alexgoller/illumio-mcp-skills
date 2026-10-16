@@ -14,3 +14,11 @@
 - Check the server's open and closed issues and recent commits before
   reusing workarounds from an older skill; #43-#45 shipped overnight and
   made the app-profile workarounds obsolete.
+
+## 2026-10-16 colour legends
+- A viewer asked what an orange section strip meant against a black one;
+  it meant nothing. Rule for every skill: colour, bold and tints carry
+  meaning only, decorative accents are one neutral grey, and every section,
+  chart, table or diagram that uses colour ends with a legend naming each
+  colour where it is used. Now a README convention and a checklist item in
+  each skill that renders anything.

@@ -19,6 +19,11 @@ The `Package skills` workflow runs `package.sh` on every push and pull request a
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
+## Conventions
+
+- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server).
+- Colour is used only for meaning. Every dashboard, chart, document table or diagram that uses colour, bold or a tint carries a legend where the colour appears, and decorative colour is one neutral grey.
+
 ## Skills
 
 ### illumio-pce-assessment

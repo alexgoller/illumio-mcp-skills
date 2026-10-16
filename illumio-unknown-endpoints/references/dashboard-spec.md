@@ -51,6 +51,36 @@ Severity and policy mapping, used everywhere (badges, row tints, bars):
 Address class chips: private `tealLight`/`navy`, public `orangeLight`/
 `orange`, noise `gray100`/`gray500`.
 
+**Colour carries meaning only.** A viewer asked what an orange section
+strip meant against a black one; the answer was "nothing", which is a
+defect. Rules:
+
+- Section heading strips are all `gray300`. No per-section colour.
+- A KPI card's top border is `red` or `orange` only when the KPI is a risk
+  (inside managed subnets, allowed into enforced, scanners, public
+  sources) **and** its value is above zero; otherwise `gray300`.
+- Subnet bars are coloured by the worst finding severity among that
+  subnet's unknown hosts.
+- Timeline bars are stacked by policy decision in the policy colours.
+- A **colour key** sits next to the tab bar on every tab: high finding /
+  blocked, medium / potentially blocked, low, allowed / ok, info, and the
+  sentence "grey strips and borders mean nothing".
+- **Every section that uses colour ends with a `Legend`** listing exactly
+  the colours used in that section and what each means, with a swatch of
+  the same kind (fill, coloured text, outline, dashed line). Required
+  legends:
+  - Overview: severity bar colours; KPI top-border rule
+  - Findings: card border and badge = severity; address class chips
+  - Unknown sources / destinations: row tints; port in red bold = admin
+    port, black = other port; policy bar segments and the "partial" tag;
+    class chips; finding badge colour = severity
+  - Subnets: bar colour = worst finding in the subnet, bar length = unknown
+    host count, click to list
+  - Suggestions: kind badge colours
+  - Deep dive: stacked policy colours, spike outline, 3x-median dashed line;
+    policy badges on the peer table
+  A viewer must never have to guess what a colour, a bold or a tint means.
+
 ## Data constants
 
 Build these from the report, in this order, at the top of the file:
@@ -155,8 +185,10 @@ Build these inside the file: `Badge` (`label, color, bg`),
 `SeverityBadge`, `ClassChip`, `KPICard` (label, value, subtitle, accent),
 `StatusBanner`, `TabBar`, `PolicyBar` (three-segment inline bar),
 `DataTable` (column definitions, search, sort, row tint callback, "and N
-more" footer), `BarList` (horizontal bars with labels), `TimelineChart`
-(SVG bars with spike outlines), `Section` (heading, optional accent bar).
+more" footer), `BarList` (horizontal bars with labels, colour per item),
+`TimelineChart` (SVG bars with spike outlines), `Section` (heading with
+the neutral strip), `ColourKey`, `Legend` and `Swatch`, with the legend
+texts in one `LEGEND` constant so the same wording appears everywhere.
 
 ## Empty states
 
@@ -182,3 +214,5 @@ file. The artifact renders directly in Claude's UI.
 - [ ] The Suggestions tab says nothing was created
 - [ ] The Deep dive tab exists only when `deepDive` is not null, and shows the spike caveat verbatim
 - [ ] All tabs render with empty data
+- [ ] No colour without meaning: section strips grey, KPI borders coloured only for non-zero risk values, colour key visible on every tab
+- [ ] Every section that uses colour, bold or a tint ends with a legend that names each one
