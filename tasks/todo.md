@@ -87,7 +87,7 @@ a QSA-style evidence index as an appendix rather than a ROC format.
 - [x] Server issue: compliance-check scope labels, active policy, NIS2, evidence refs
 - [x] README, package.sh
 - [x] cold-read test: 12 scenarios as intended, 25 clarity items applied
-- [ ] PR, CI
+- [x] PR #6 opened, CI green
 
 ## Review (compliance evidence, 2026-10-16)
 
