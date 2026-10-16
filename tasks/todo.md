@@ -67,3 +67,51 @@ follow-up before merge.
 - [x] README: installing a skill, releasing
 - [x] Local run of package.sh plus the layout check: 6 zips ok
 - [x] CI green on the PR: run 38693631703, all steps passed, artifact `skills` uploaded
+
+# illumio-compliance-evidence skill (2026-10-16)
+
+Request: "build this" after the evidence-pack proposal (PCI DSS, DORA, NIS2).
+Assumptions (user did not answer): scope comes from label expressions the
+user confirms (no fixed key); audience is internal and regulator use, with
+a QSA-style evidence index as an appendix rather than a ROC format.
+
+- [x] Server facts: get-rulesets active output fields, get-events filters and
+      output, traffic summary with exclude_* labels, get-workloads label
+      filter, compliance-check output, VEN fields (Explore subagent)
+- [x] SKILL.md: scope confirmation, collection from active policy, binary
+      tests, evidence pack (docx) and appendix with hashes, drift re-run,
+      verification, gaps, mistakes
+- [x] references/matrix-pci-dss.md, matrix-dora.md, matrix-nis2.md
+- [x] references/tests.md (binary tests T1..Tn with tool calls and pass rules)
+- [x] references/pack-template.md (docx structure, legend convention)
+- [x] Server issue: compliance-check scope labels, active policy, NIS2, evidence refs
+- [x] README, package.sh
+- [x] cold-read test: 12 scenarios as intended, 25 clarity items applied
+- [ ] PR, CI
+
+## Review (compliance evidence, 2026-10-16)
+
+Built: SKILL.md (Steps 0 to 8, scope as app/env pairs confirmed in one
+question, active policy only, 9 queries per pair plus 8), tests.md (T1 to
+T14 with calls, fields, pass rules, cap rule, worst-of rule), three
+framework matrices with "not covered" lists, pack-template.md (docx
+structure, status colours with legend row, drift table, evidence index
+with hashes). README entry. Issues #54 (compliance-check evidence mode)
+and #55 (get-events audit fields, ruleset timestamps) filed.
+
+Verified: tool shapes from the server checkout at fbe1cce (0.12.0) via a
+subagent, including that get-workloads takes one label, get-rulesets
+active output is structured without timestamps, excludes are OR'd per
+entry, compliance-check reads draft and has no NIS2. Cold-read test by a
+fresh agent: all 12 scenarios answered as intended; its 25 clarity items
+applied (step ranges, explicit T10 calls, budget incl. get-labels, one
+scope rule, timestamps claims removed from matrices, T3/T4/T11 added to
+PCI rows, worst-of rule, EXCEPTION definition, T7/T8 clause handling,
+cap rule, unscoped_consumers default, in_sync shape, event status field,
+T14 raw rows, window end date, skill name, drift table, justification
+timing, T3 table, timeline call for detection rows, data-tier input, file
+naming, EXCEPTION in chat reply).
+
+Not verified: no PCE connection; no docx was generated in this session.
+Framework article numbers are references to check against the official
+texts when a pack is assembled, as the matrices say.
