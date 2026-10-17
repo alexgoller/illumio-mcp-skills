@@ -124,4 +124,4 @@ Request: "the skill must be able to provide jsx artifacts, word, markdown and pp
 - [x] `references/outputs.md`: json, md, docx, pptx (deck outline, legend strip), jsx; one base name; defaults json+md+docx
 - [x] `references/dashboard-example.jsx`: rendered, 7 tabs, 0 errors, legend in every coloured section
 - [x] SKILL.md: formats input, Step 8 = pack.json first then renderers, verification items, mistakes; pack-template and README updated
-- [ ] CI green on PR #6
+- [x] CI green on PR #6
