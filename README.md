@@ -172,15 +172,21 @@ Turns the PCE into audit evidence for the segmentation controls a framework asks
 - The **illumio-mcp** MCP server connected with a healthy PCE connection (0.10.0 or later for active-policy rulesets)
 - The **docx skill** for the Word document
 
-**Outputs:**
+**Outputs** (any set of `json`, `md`, `docx`, `pptx`, `jsx`, all rendered from one `pack.json`):
+- `pack.json`: the pack model (scope, tests per pair, requirements, attestations, findings, boundary tables, drift, evidence index with hashes), for GRC tools and the next run's drift
 - A Word evidence pack: scope declaration with label hrefs, method, control summary per requirement (PASS, FAIL, EXCEPTION, ATTESTED, NOT TESTED with a legend row), one section per requirement with the evidence tables and the query that produced them, the full test table, attestations, drift since the previous pack, the out-of-scope list, and an evidence index with SHA-256 hashes
 - A Markdown twin for diffing between runs, and a zip of the raw tool results
+- A PowerPoint deck: title with overall status, scope and method, control summary, one slide per failing or excepted requirement, attestations, drift, out of scope, evidence index, with a legend strip on every status slide
+- A React dashboard in the shared Illumio style: overview, requirements with expandable tests and evidence, tests per pair, boundary traffic with policy bars and the blocked-per-day timeline, attestations, drift, evidence index, with a colour key and a legend in every section
 
 **Layout:**
 - `SKILL.md` — inputs, scope confirmation, Steps 0 to 8, verification, server gaps, common mistakes
 - `references/tests.md` — tests T1 to T14 with calls, fields, pass rules and the query budget (9 per pair plus 8)
 - `references/matrix-pci-dss.md`, `matrix-dora.md`, `matrix-nis2.md` — requirement to evidence mapping with what Illumio does not cover
-- `references/pack-template.md` — document structure, colours and legend, appendices, optional dashboard
+- `references/pack-schema.md` — the JSON pack model every format renders from
+- `references/outputs.md` — the five formats, file names, deck outline
+- `references/pack-template.md` — Markdown and Word structure, colours and legend, appendices
+- `references/dashboard-example.jsx` — working dashboard with synthetic pack data
 
 **Data Sources (via illumio-mcp):**
 - Workload inventory with enforcement mode and VEN health, active rulesets (scope and actor filters), IP lists

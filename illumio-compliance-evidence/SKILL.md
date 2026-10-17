@@ -1,6 +1,6 @@
 ---
 name: illumio-compliance-evidence
-description: "Use when the user wants to prove, evidence, document or audit segmentation controls in an Illumio PCE for a regulation or standard: PCI DSS (CDE segmentation, requirement 1, 11.4.5, 12.5.2), DORA (ICT asset identification, network segmentation, isolation, change control), NIS2 (network security and segmentation, asset inventory, access control), or an audit evidence pack, compliance evidence, auditor request, QSA evidence, regulator evidence, segmentation proof, control evidence, are we compliant, show the auditor. Scope is a list of app and env label pairs. Produces a Word evidence pack with binary test results, attestations, raw tool results and hashes, re-runnable for drift. Not a compliance score (that is compliance-check) and not a general assessment (illumio-pce-assessment). Requires the illumio-mcp MCP server and the docx skill."
+description: "Use when the user wants to prove, evidence, document or audit segmentation controls in an Illumio PCE for a regulation or standard: PCI DSS (CDE segmentation, requirement 1, 11.4.5, 12.5.2), DORA (ICT asset identification, network segmentation, isolation, change control), NIS2 (network security and segmentation, asset inventory, access control), or an audit evidence pack, compliance evidence, auditor request, QSA evidence, regulator evidence, segmentation proof, control evidence, are we compliant, show the auditor. Scope is a list of app and env label pairs. Produces an evidence pack as JSON, Markdown, Word, PowerPoint and a React dashboard, all from one pack model, with binary test results, attestations, raw tool results and hashes, re-runnable for drift. Not a compliance score (that is compliance-check) and not a general assessment (illumio-pce-assessment). Requires the illumio-mcp MCP server and the docx skill."
 ---
 
 # Illumio Compliance Evidence Pack
@@ -10,7 +10,10 @@ controls a framework asks for. The output is an evidence pack: scope
 declaration, requirement-by-requirement evidence from **active** policy and
 observed traffic, binary test results with the rule stated, attestations
 for what the PCE cannot observe, the raw tool results with SHA-256 hashes,
-and a drift section against the previous pack. It is evidence that
+and a drift section against the previous pack. The pack is one JSON model
+(`references/pack-schema.md`) rendered into whichever of JSON, Markdown,
+Word, PowerPoint and a React dashboard the user asks for
+(`references/outputs.md`). It is evidence that
 supports named controls. It is not a certification, not a score, and it
 says which requirements it does not cover.
 
@@ -29,12 +32,15 @@ attestations by a named person.
 | `references/matrix-pci-dss.md` | PCI DSS v4.0.1 requirement to evidence mapping |
 | `references/matrix-dora.md` | DORA and RTS 2024/1774 mapping |
 | `references/matrix-nis2.md` | NIS2, Implementing Regulation 2024/2690 and national law mapping |
-| `references/pack-template.md` | the document structure, status colours and legend, appendices, optional dashboard |
+| `references/pack-schema.md` | the JSON pack model every output is rendered from |
+| `references/outputs.md` | the five formats (json, md, docx, pptx, jsx), file names, deck outline |
+| `references/pack-template.md` | the document structure (Markdown and Word), status colours and legend, appendices |
+| `references/dashboard-example.jsx` | working dashboard with synthetic pack data; replace the data block |
 
 The docx mechanics (Arial, Illumio navy headings, status cells, validation)
 are those of the `illumio-pce-assessment` skill (directory
 `illumio-pce-security-assessment`); read the docx skill before building
-the document.
+the Word document and the pptx skill before building the deck.
 
 ## Inputs
 
@@ -61,7 +67,11 @@ the document.
 - **Attestations**: last policy review (date, who, record), isolation drill
   (date, who, record), segmentation test or pen test (date, tester, report),
   log retention period. Optional; missing ones stay as empty rows.
-- **Previous pack**: path to the earlier Markdown twin, for drift.
+- **Previous pack**: path to the earlier `pack.json` (or Markdown twin),
+  for drift.
+- **Formats**: any of `json`, `md`, `docx`, `pptx`, `jsx`. Default `json`,
+  `md`, `docx`. `pack.json` is always written, since every other format is
+  rendered from it.
 
 ## Gentle on the PCE
 
@@ -149,28 +159,32 @@ Fill the attestation rows from the inputs. Name the isolation capability
 found in T5 (deny or override-deny rule, ringfence ruleset) and leave the
 drill as attestation. Never run one.
 
-### Step 8: Pack
+### Step 8: Pack model, then formats
 
-1. Hash every file in the evidence folder (`shasum -a 256`) into
-   `index.txt`; that is Appendix A.
-2. Write the Markdown twin along `references/pack-template.md`: cover,
-   scope, method, control summary from the framework matrix with test
-   results, one section per matrix row, test table, attestations, drift,
-   out-of-scope list, evidence index.
-3. Build the docx with the docx skill from the Markdown twin, status cells
-   and the legend row under every table that uses them (red FAIL, orange
-   EXCEPTION or capped, green PASS, teal ATTESTED or NOT TESTED; no other
-   colour carries meaning). Validate it with the docx skill's validator.
-4. Drift: when a previous Markdown twin is given, build the drift table
-   of `references/pack-template.md` section 7 (item, previous, current,
-   change) for tests, rulesets, workloads, admitted services and unknown
-   endpoints, added and removed, citing the previous run's date.
-5. Save as `/mnt/user-data/outputs/Illumio_Evidence_<framework>_<scope>_<YYYY-MM-DD>.docx`
-   with the `.md` twin and a zip of the evidence folder beside it, or in
-   the working directory when that path does not exist. Present all three.
+1. Hash every file in the evidence folder (`shasum -a 256`); the hashes go
+   into `evidence_index`.
+2. Build `pack.json` along `references/pack-schema.md`: scope with hrefs,
+   tests with per-pair results and evidence file names, requirements from
+   the framework matrix with the worst-of rule, attestations, findings,
+   boundary tables, drift against the previous `pack.json` (or Markdown
+   twin) as the drift table of `references/pack-template.md` section 7,
+   evidence index, not-covered list, `overall`. Check it against the
+   schema's rules before rendering anything.
+3. Render the requested formats from `pack.json` only, as
+   `references/outputs.md` defines: Markdown twin (`pack-template.md`),
+   Word via the docx skill with status cells and the legend row under every
+   status table, PowerPoint via the pptx skill with the deck outline and a
+   legend strip on every status slide, the React dashboard from
+   `references/dashboard-example.jsx` with the data block replaced. No
+   format shows a number that is not in `pack.json`. Validate the docx
+   and pptx with their skills' validators.
+4. Save under one base name,
+   `Illumio_Evidence_<framework>_<scope>_<YYYY-MM-DD>`, in
+   `/mnt/user-data/outputs/` when it exists, else the working directory,
+   with a zip of the evidence folder beside them. Present every file.
 
 The chat reply is short: the control summary table, the FAIL, EXCEPTION
-and NOT TESTED items, the query count, and the three file paths.
+and NOT TESTED items, the query count, and the file paths.
 
 ## Verification (before publishing)
 
@@ -184,7 +198,8 @@ and NOT TESTED items, the query count, and the three file paths.
 - [ ] Requirement text is quoted from the official source, not from the matrix
 - [ ] The query count on the cover equals the calls made, excluding the connection check and the changelog
 - [ ] No write tool was called; no isolation was run
-- [ ] Every table with status cells has the legend row
+- [ ] Every table with status cells has the legend row; every deck slide and dashboard section that uses status colour has its legend
+- [ ] `pack.json` exists, validates against the schema rules, and every other file was rendered from it; a spot check of three numbers in each format matches it
 
 ## Known gaps in illumio-mcp-server
 
@@ -209,6 +224,8 @@ and NOT TESTED items, the query count, and the three file paths.
 | Using `exclude_sources` to remove the scope | Excludes are OR'd per entry; drop intra-scope rows client-side. |
 | Counting an all-workloads consumer in a scoped ruleset as broad | Inside a ruleset scoped to the pair it means the pair's own workloads. |
 | Quoting requirement text from the matrix | The matrix holds references; quote the official text and cite it. |
+| Rendering the deck or dashboard from the tool results | Everything renders from `pack.json`; build it first. |
+| Skipping `pack.json` because only a deck was asked for | It is always written; the deck is a view of it. |
 | Claiming PCI, DORA or NIS2 compliance | The pack evidences segmentation controls; section 8 lists what it does not cover. |
 | Running an isolation to prove T12 | Never. It is an attestation. |
 | Skipping the scope confirmation | One combined question at Step 1, every time. |

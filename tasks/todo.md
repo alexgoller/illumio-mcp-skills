@@ -115,3 +115,13 @@ naming, EXCEPTION in chat reply).
 Not verified: no PCE connection; no docx was generated in this session.
 Framework article numbers are references to check against the official
 texts when a pack is assembled, as the matrices say.
+
+# Compliance evidence: five output formats (2026-10-17)
+
+Request: "the skill must be able to provide jsx artifacts, word, markdown and ppt as well as plain json".
+
+- [x] `references/pack-schema.md`: one JSON pack model every format renders from (worst-of rules, evidence refs, drift)
+- [x] `references/outputs.md`: json, md, docx, pptx (deck outline, legend strip), jsx; one base name; defaults json+md+docx
+- [x] `references/dashboard-example.jsx`: rendered, 7 tabs, 0 errors, legend in every coloured section
+- [x] SKILL.md: formats input, Step 8 = pack.json first then renderers, verification items, mistakes; pack-template and README updated
+- [ ] CI green on PR #6

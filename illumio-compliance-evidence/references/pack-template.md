@@ -1,10 +1,11 @@
-# Evidence pack structure
+# Evidence pack structure (Markdown and Word)
 
-One Word document per framework and scope, in the illumio-pce-assessment
-style (Arial, Illumio navy headings, status cells), built with the docx
-skill. Everything below is a section heading in that order. The same
-content, minus the appendix files, is also written as Markdown next to the
-docx so it can be diffed between runs.
+The document rendering of `pack.json` (see `pack-schema.md`): one Word
+document per framework and scope, in the illumio-pce-assessment style
+(Arial, Illumio navy headings, status cells), built with the docx skill,
+and the same content as Markdown for diffing between runs. Everything
+below is a section heading in that order. The deck and the dashboard are
+defined in `outputs.md`.
 
 ## Cover
 
@@ -89,11 +90,8 @@ under `evidence/<run>/NN-<tool>-<pair>.json` in call order (scope-wide
 calls carry `all` as the pair), named in Appendix A. The docx
 embeds the index, not the files.
 
-## Optional dashboard
+## Other formats
 
-If the user wants an interactive view, build it from section 3 and 5 with
-the components and legend rules of `illumio-unknown-endpoints/references/
-dashboard-spec.md`: a status banner (red when any FAIL, orange when any
-exception, green otherwise), a requirement table with status badges, the
-test table, and a legend in every section. It never shows a number that
-is not in the pack.
+The PowerPoint deck and the React dashboard are rendered from the same
+`pack.json`; their structure is in `outputs.md` and the dashboard's
+working example is `dashboard-example.jsx`.
