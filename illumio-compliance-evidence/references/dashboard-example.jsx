@@ -128,6 +128,9 @@ const STATUS = {
   PASS: { bg: C.green, color: C.white, label: "PASS" },
 };
 const fmt = (n) => (n == null ? "–" : n.toLocaleString("en-US"));
+// An evidence entry is a file name, or a query descriptor from
+// collect-compliance-evidence ({tool, query_name, ...}); render both.
+const evidenceLabel = (e) => (typeof e === "string" ? e : [e.tool, e.query_name].filter(Boolean).join(" ") || JSON.stringify(e));
 const worst = (list) => ORDER.find((s) => list.includes(s)) || "PASS";
 
 function Badge({ label, color, bg }) {
@@ -315,7 +318,7 @@ function RequirementsTab() {
           <div style={{ fontWeight: 700, color: C.navy }}>Req {r.id}: tests and evidence</div>
           {r.tests.map((tid) => { const t = tests.find((x) => x.id === tid); return (
             <div key={tid} style={{ marginTop: 6 }}><StatusBadge s={t.result} /> <b>{t.id} {t.name}</b> <span style={{ color: C.gray500 }}>rule: {t.rule}</span>
-              {Object.entries(t.per_pair).map(([p, v]) => <div key={p} style={{ marginLeft: 12, color: C.gray700 }}>{p}: {v.measured} <span style={{ fontFamily: mono, fontSize: 11, color: C.gray500 }}>{v.evidence.join(", ")}</span></div>)}
+              {Object.entries(t.per_pair).map(([p, v]) => <div key={p} style={{ marginLeft: 12, color: C.gray700 }}>{p}: {v.measured} <span style={{ fontFamily: mono, fontSize: 11, color: C.gray500 }}>{v.evidence.map(evidenceLabel).join(", ")}</span></div>)}
             </div>); })}
           {r.not_covered && <div style={{ marginTop: 6, color: C.gray500 }}>Not covered by Illumio: {r.not_covered}</div>}
         </div>); })()}
