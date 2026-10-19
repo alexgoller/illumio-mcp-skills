@@ -219,6 +219,12 @@ Use colored cells for status indicators:
 - **PASS / OK / Enforced / Low Risk**: Green background (`00C48C`), white text
 - **INFO / In Progress**: Teal background (`00B4D8`), white text
 
+### Colour legend (required)
+Colour is used only for meaning, and the reader is never left to guess it:
+- Directly under the first table that uses status cells, and at the start of every later section that uses them, add a one-row legend table: four cells in the four status colours, each reading "Red: critical / fail / high risk", "Orange: warning / medium risk", "Green: pass / enforced / low risk", "Teal: info / in progress".
+- The KPI dashboard tiles are coloured by what they report, not by position: red for a count that needs action, orange for one to watch, green for a healthy one, teal for a plain count. Add a caption line under the tiles stating that rule.
+- Brand-only colour (headings, header bars, borders) carries no meaning; do not put it in a legend, and do not use a status colour for decoration.
+
 ### Typography
 - Font: Arial throughout
 - Headings: Bold, Illumio Dark Navy, H1 at 32pt, H2 at 26pt
@@ -235,6 +241,10 @@ Use colored cells for status indicators:
 
 ### KPI Dashboard
 For the executive summary, create a 4-cell table with no borders, each cell a different brand color, containing a large number and a small label. This creates a visual dashboard effect.
+
+## Colour check before finishing
+
+- Every section with status cells has the legend row; the KPI tiles have their caption; no status colour is used decoratively.
 
 ## Adapting the Report
 
