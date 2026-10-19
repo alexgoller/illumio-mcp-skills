@@ -10,7 +10,7 @@ never computes a finding the report does not have.
 spec with synthetic data, checked tab by tab in a browser. Start from it:
 keep the components, replace the block between `// ==== DATA ====` and
 `// ==== END DATA ====` with the report's data, set `deepDive` to `null`
-when Step 7 did not run.
+when Step 3 (the deep dive) did not run.
 
 ## Technology
 
@@ -120,6 +120,18 @@ const deepDive = null | { ip, direction, bucket, effectiveBucket, resolutionNote
 ```
 
 Peer apps are always the `app (env)` tuple; never an app without its env.
+
+Field mapping from `find-unknown-endpoints`, via the report: `ip` stays
+`ip`; `address_class` is `addressClass`; `ip_lists` is `ipLists`;
+`neighbourhood.managed_workloads` is `neighbourhood.managedCount`;
+`as_source` / `as_destination` `peer_apps` and `peer_workloads` are
+`peerApps` and `peerWorkloads`; `ports[].admin` keeps its name; `policy`
+keeps `allowed` and `blocked`, `potentially_blocked` becomes
+`potentiallyBlocked`, and `partial` is true when `totals.flows_truncated`
+was; `profile` is `shapes`; `likely_provider` and `provider_confidence` are
+`provider` and `providerConfidence`. `collapsedRanges` is `[]`: the tool
+keeps every destination as its own `ip`, so there are no IP-list-named
+rows to collapse.
 
 ## Health banner
 
