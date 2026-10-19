@@ -125,3 +125,26 @@ Request: "the skill must be able to provide jsx artifacts, word, markdown and pp
 - [x] `references/dashboard-example.jsx`: rendered, 7 tabs, 0 errors, legend in every coloured section
 - [x] SKILL.md: formats input, Step 8 = pack.json first then renderers, verification items, mistakes; pack-template and README updated
 - [x] CI green on PR #6
+# Dashboard for illumio-unknown-endpoints (2026-10-15)
+
+Request: "the skill needs to create a similar styled dashboard as the other skills in here".
+
+- [x] Read the dashboard conventions of illumio-daily-assessment and illumio-security-dashboard (React .jsx, inline styles, Illumio palette C, DM Sans, pill TabBar, KPICard, Badge, DataTable, app (env) tuples, /mnt/user-data/outputs path, checklist)
+- [x] `references/dashboard-spec.md`: palette and status colours, data constants, banner rule, 6 tabs + conditional Deep dive, components, empty states, output, checklist
+- [x] `references/dashboard-example.jsx`: working example with synthetic data
+- [x] SKILL.md Step 9, Files table, frontmatter triggers, verification item; README outputs and layout
+- [x] Verify: esbuild bundle + headless Chrome, every tab clicked, zero console errors, expected content found, three screenshots inspected
+- [x] PR #5 opened, CI green
+
+## Review
+
+Rendered at 1280px: Overview (banner, 8 KPIs, severity bar, top issues), Unknown sources (chips, search, admin ports in red, policy bars with "partial"), Deep dive (stacked policy bars, 3x-median line, spike outlined, worst spike labelled). All seven tabs clicked in headless Chrome with no window errors. The example is 540 lines; it ships inside the skill so the dashboard is reproducible instead of re-derived from prose each run.
+
+# Colour legends across skills (2026-10-16)
+
+- [x] unknown-endpoints dashboard: neutral section strips, attention-based KPI borders, severity-coloured subnet bars, ColourKey on every tab, Legend in every section, LEGEND constant; report template legend line; spec and checklist
+- [x] pce-assessment (docx): legend row under status-cell tables, KPI tile caption, colour check
+- [x] security-dashboard and daily-assessment: colour key + per-section Legend requirement, neutral accents, checklist items
+- [x] agentic-ai: Sankey legend lists every agent in its ribbon colour (dynamic, "other" grouped); report template stacked bar needs a legend
+- [x] README convention
+- [x] Verified: dashboard example re-rendered, 7 tabs, 0 errors, legend present in every section; Sankey template rendered, legend shows Cursor, ChatGPT, Claude, Codex

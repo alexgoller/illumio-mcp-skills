@@ -29,7 +29,13 @@ Ordered high, medium, low; by connections within a severity.
 
 ## Unknown sources
 
-| Address | FQDN | Class | IP list | Neighbourhood | Peer apps | Ports (admin in bold) | Allowed / pot. blocked / blocked | Connections | Shape | Findings |
+Legend for both tables: **bold** port = admin port (22, 3389, 445, 1433 and
+the rest of the rubric's list); the policy column is allowed / potentially
+blocked / blocked connections, "partial" when the summary was capped and the
+allowed count is unverified; Class is private, public or noise; IP list
+names only lists narrower than the default; Findings are the rubric ids.
+
+| Address | FQDN | Class | IP list | Neighbourhood | Peer apps | Ports | Allowed / pot. blocked / blocked | Connections | Shape | Findings |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 ## Unknown destinations
