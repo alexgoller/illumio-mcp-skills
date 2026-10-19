@@ -46,7 +46,9 @@ repeats this sentence.
 - Requirement text, quoted from the official source with its citation.
 - Control as implemented in Illumio, in two sentences.
 - Evidence: the tables for the tests named in the matrix row, each with
-  the query that produced it (tool, arguments, timestamp) in a caption.
+  the query that produced it (tool, arguments, timestamp; for the tests
+  the `collect-compliance-evidence` tool computes, the query descriptor it
+  returned and `collected_at`) in a caption.
 - Result and the rule that produced it.
 - Gap and remediation when the result is FAIL, with an owner line left for
   the user.
@@ -80,8 +82,11 @@ The matrix's "not claimed" list verbatim.
 ## Appendix A: Evidence index
 
 One row per evidence file: file name, which tests use it, the tool and
-arguments, collection timestamp, row count, SHA-256. This is the index an
-auditor's evidence request is answered from.
+arguments, collection timestamp, row count, SHA-256. The row for the
+`collect-compliance-evidence` result also lists the queries the tool ran
+(tool, arguments, rows returned, capped), one line each, so a test's query
+descriptor can be found in this appendix. This is the index an auditor's
+evidence request is answered from.
 
 ## Appendix B: Raw results
 
