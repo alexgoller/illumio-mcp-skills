@@ -146,7 +146,7 @@ Runs an end-to-end agentic AI security and risk assessment against an Illumio PC
 
 **Directory:** `illumio-unknown-endpoints/`
 
-Finds the addresses in PCE traffic that the PCE does not know at all, neither as a managed workload nor as an unmanaged workload, profiles what each one does, and suggests the inventory and policy objects that would name it. Read-only; illumio-mcp tools only, no helper scripts.
+Finds the addresses in PCE traffic that the PCE does not know at all, neither as a managed workload nor as an unmanaged workload, profiles what each one does, and suggests the inventory and policy objects that would name it. Read-only; illumio-mcp tools only, no helper scripts. Requires illumio-mcp-server 0.13.0 or later (`find-unknown-endpoints`); the v1.1.0 release of this skill is the version for older servers.
 
 **Triggers:** unknown IPs, rogue hosts, rogue IP addresses, unmapped or uninventoried endpoints, what is talking to my workloads that is not a workload, hosts without a VEN, inventory gaps, scanners hitting workloads, unknown sources allowed into enforced workloads, unknown external destinations.
 
@@ -155,18 +155,17 @@ Finds the addresses in PCE traffic that the PCE does not know at all, neither as
 
 **Outputs:**
 - A single-file React dashboard in the same Illumio style as the other dashboard skills: health banner, KPI cards, findings, unknown sources and destinations tables with policy bars, a subnets view of inventory gaps, suggestions, and a deep-dive timeline when run
-- A report: scope line with the query count and truncation, summary counts, findings U1 to U10 (host inside a managed subnet, scanner, admin-port reach, allowed into enforced workloads, uninventoried infrastructure, public source, notable public destination, no IP-list object, volume outlier, unverified policy mix), unknown sources and destinations tables with address class, IP-list coverage, subnet neighbourhood, peers, ports, policy mix and profile shape, and suggested `create-workload` / `create-iplist` / `create-deny-rule` objects that are never executed
+- A report: scope line with the query count and truncation, summary counts, findings U1 to U10 (host inside a managed subnet, scanner, admin-port reach, allowed into enforced workloads, uninventoried infrastructure, public source, notable public destination, no IP-list object, volume outlier, unverified counts), unknown sources and destinations tables with address class, IP-list coverage, subnet neighbourhood, peers, ports, policy mix and profile shape, and suggested `create-workload` / `create-iplist` / `create-deny-rule` objects that are never executed
 - An opt-in deep dive per endpoint: peer x port x policy table and a spike-marked timeline
 
 **Layout:**
-- `SKILL.md` — definitions, workflow Steps 0 to 8, PCE budget (5 queries), verification checklist, server gaps, common mistakes
+- `SKILL.md` — definitions, workflow Steps 0 to 5, PCE budget (1 query), verification checklist, server gaps, common mistakes
 - `references/findings-rubric.md` — endpoint classes, profile shapes, findings U1 to U10, suggestion rules
 - `references/report-template.md` — report skeleton
 
 **Data Sources (via illumio-mcp):**
-- Workload inventory (compact, with interface addresses and managed flag) and IP lists
-- Traffic summary (external destinations, blocked, app-to-app), unmanaged-traffic scan filtered against the inventory, process egress
-- Per-endpoint grouped flows and timeline (waits on illumio-mcp-server#47)
+- `find-unknown-endpoints`: one Explorer pull joined server-side against the workload inventory and the draft IP lists, with address class, IP-list coverage, subnet neighbourhood, peers, ports, policy mix and profile shapes per endpoint
+- Per-endpoint deep dive (`find-unknown-endpoints ip:` with its timeline) and, on request, `get-traffic-flows` filtered by the address for the process table
 
 ### illumio-compliance-evidence
 
