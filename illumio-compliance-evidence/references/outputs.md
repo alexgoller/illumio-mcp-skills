@@ -58,9 +58,14 @@ No slide carries a number that is not in `pack.json`.
 A single-file React dashboard in the style of the other skills, built
 from `dashboard-example.jsx` next to this file: keep its components,
 replace the block between `// ==== DATA ====` and `// ==== END DATA ====`
-with the `pack.json` content. Tabs: Overview (status banner, KPIs,
-findings), Requirements (status filter, expandable rows with tests and
-evidence files), Tests (per pair, measured values), Boundary (admitted
+with the `pack.json` content. The example's data block holds file names
+in every `evidence` list; a pack built from `collect-compliance-evidence`
+holds query descriptors there too, which the Requirements rows show as
+`tool` plus `query_name` (one line in the example's join) and the Evidence
+tab shows under the tool result's index row. Tabs: Overview (status
+banner, KPIs, findings), Requirements (status filter, expandable rows with
+tests and evidence: files and query descriptors), Tests (per pair,
+measured values), Boundary (admitted
 services and crossings with policy bars, the timeline), Attestations,
 Drift (only with a previous run), Evidence (index with hashes). Colour key
 next to the tab bar and a legend in every section, as

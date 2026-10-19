@@ -176,7 +176,7 @@ Turns the PCE into audit evidence for the segmentation controls a framework asks
 **Triggers:** prove or evidence compliance, audit evidence pack, auditor or QSA or regulator request, segmentation proof, are we compliant, show the auditor, PCI CDE evidence, DORA evidence, NIS2 evidence.
 
 **Prerequisites:**
-- The **illumio-mcp** MCP server connected with a healthy PCE connection (0.10.0 or later for active-policy rulesets)
+- The **illumio-mcp** MCP server connected with a healthy PCE connection, **0.13.0 or later** (`collect-compliance-evidence`, `find-unknown-endpoints`, `get-events` with `kind` and `resource_changes`, ruleset timestamps); on an older server use the v1.1.0 release of this skill
 - The **docx skill** for the Word document
 
 **Outputs** (any set of `json`, `md`, `docx`, `pptx`, `jsx`, all rendered from one `pack.json`):
@@ -187,8 +187,8 @@ Turns the PCE into audit evidence for the segmentation controls a framework asks
 - A React dashboard in the shared Illumio style: overview, requirements with expandable tests and evidence, tests per pair, boundary traffic with policy bars and the blocked-per-day timeline, attestations, drift, evidence index, with a colour key and a legend in every section
 
 **Layout:**
-- `SKILL.md` — inputs, scope confirmation, Steps 0 to 8, verification, server gaps, common mistakes
-- `references/tests.md` — tests T1 to T14 with calls, fields, pass rules and the query budget (9 per pair plus 8)
+- `SKILL.md` — inputs, scope confirmation, Steps 0 to 6, verification, server gaps, common mistakes
+- `references/tests.md` — tests T1 to T14 with the rules, what `collect-compliance-evidence` computes, what the skill reads, and the query budget
 - `references/matrix-pci-dss.md`, `matrix-dora.md`, `matrix-nis2.md` — requirement to evidence mapping with what Illumio does not cover
 - `references/pack-schema.md` — the JSON pack model every format renders from
 - `references/outputs.md` — the five formats, file names, deck outline
@@ -196,6 +196,6 @@ Turns the PCE into audit evidence for the segmentation controls a framework asks
 - `references/dashboard-example.jsx` — working dashboard with synthetic pack data
 
 **Data Sources (via illumio-mcp):**
-- Workload inventory with enforcement mode and VEN health, active rulesets (scope and actor filters), IP lists
-- Boundary traffic in and out of each scope pair by policy decision, traffic summaries
-- Unknown endpoints inside scope subnets (via illumio-unknown-endpoints), draft-versus-active drift, PCE events
+- `collect-compliance-evidence`: one call per framework run for all scope pairs, computing T1 to T9, T11 and T14 from active policy (inventory, enforcement, VEN health, providing rules, broad consumers, admitted services with service objects expanded, inbound and outbound boundary flows with the blocked timeline, pending draft changes, events and flows in window)
+- `find-unknown-endpoints` for unknown hosts inside scope subnets (T10)
+- `get-events kind: "policy"` for the change history with actor and resource changes (T11), `get-rulesets pversion: "active"` per pair for the isolation capability and the ruleset timestamps (T12, T13)
