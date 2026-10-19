@@ -152,10 +152,10 @@ Rendered at 1280px: Overview (banner, 8 KPIs, severity bar, top issues), Unknown
 # Release v1.1.0 and server issue fixes (2026-10-19)
 
 - [x] Merge PR #5 and #6 (todo.md conflict resolved by keeping both plans), tag v1.1.0, release carries 7 zips incl. illumio-compliance-evidence
-- [ ] illumio-mcp-server #47 include filters (branch fix/47-include-filters, worktree -wt-47)
-- [ ] #49 get-iplists as data, pversion, contains_ip (feat/49-iplists-data)
-- [ ] #55 get-events audit fields, ruleset timestamps (feat/55-events-audit-fields)
-- [ ] #48 find-unknown-endpoints tool (feat/48-find-unknown-endpoints)
-- [ ] #54 collect-compliance-evidence tool, nis2 (feat/54-compliance-evidence)
-- [ ] Review each PR, run the suite on the merged result, merge in order 47, 49, 55, 48, 54, resolve CHANGELOG/server.py conflicts
-- [ ] Then update the skills' gap tables (unknown-endpoints, compliance-evidence) for shipped fixes
+- [x] illumio-mcp-server #47 include filters (branch fix/47-include-filters, worktree -wt-47)
+- [x] #49 get-iplists as data, pversion, contains_ip (feat/49-iplists-data)
+- [x] #55 get-events audit fields, ruleset timestamps (feat/55-events-audit-fields)
+- [x] #48 find-unknown-endpoints tool (feat/48-find-unknown-endpoints)
+- [x] #54 collect-compliance-evidence tool, nis2 (feat/54-compliance-evidence)
+- [x] Review each PR, run the suite on the merged result, merge in order 47, 49, 55, 48, 54, resolve CHANGELOG/server.py conflicts
+- [x] Skills updated to the 0.13 tools: PR #8 (unknown-endpoints) and PR #9 (compliance-evidence) merged; new server gaps filed as #61, #62

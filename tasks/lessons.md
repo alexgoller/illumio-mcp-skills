@@ -22,3 +22,13 @@
   chart, table or diagram that uses colour ends with a legend naming each
   colour where it is used. Now a README convention and a checklist item in
   each skill that renders anything.
+
+## 2026-10-19 parallel agents in one repo
+- Two subagents told to "create a branch" in the same checkout stepped on
+  each other: one switched the shared working tree, the other had to commit
+  through a temporary worktree. Give every parallel agent its own
+  `git worktree` (as the server-fix agents had) or run them sequentially.
+- A CHANGELOG with per-PR `[Unreleased]` sections conflicts on every merge;
+  the union script in the scratchpad (merge_unreleased.py) resolved it, but
+  a repo convention (one Unreleased section, bullets appended) would avoid
+  the conflict altogether.
