@@ -167,3 +167,36 @@ Finds the addresses in PCE traffic that the PCE does not know at all, neither as
 - Workload inventory (compact, with interface addresses and managed flag) and IP lists
 - Traffic summary (external destinations, blocked, app-to-app), unmanaged-traffic scan filtered against the inventory, process egress
 - Per-endpoint grouped flows and timeline (waits on illumio-mcp-server#47)
+
+### illumio-compliance-evidence
+
+**Directory:** `illumio-compliance-evidence/`
+
+Turns the PCE into audit evidence for the segmentation controls a framework asks for: PCI DSS v4.0.1, DORA (with RTS 2024/1774) and NIS2 (with Implementing Regulation 2024/2690 and the national law). Scope is a list of `app`/`env` pairs. Read-only; illumio-mcp tools plus the docx skill.
+
+**Triggers:** prove or evidence compliance, audit evidence pack, auditor or QSA or regulator request, segmentation proof, are we compliant, show the auditor, PCI CDE evidence, DORA evidence, NIS2 evidence.
+
+**Prerequisites:**
+- The **illumio-mcp** MCP server connected with a healthy PCE connection (0.10.0 or later for active-policy rulesets)
+- The **docx skill** for the Word document
+
+**Outputs** (any set of `json`, `md`, `docx`, `pptx`, `jsx`, all rendered from one `pack.json`):
+- `pack.json`: the pack model (scope, tests per pair, requirements, attestations, findings, boundary tables, drift, evidence index with hashes), for GRC tools and the next run's drift
+- A Word evidence pack: scope declaration with label hrefs, method, control summary per requirement (PASS, FAIL, EXCEPTION, ATTESTED, NOT TESTED with a legend row), one section per requirement with the evidence tables and the query that produced them, the full test table, attestations, drift since the previous pack, the out-of-scope list, and an evidence index with SHA-256 hashes
+- A Markdown twin for diffing between runs, and a zip of the raw tool results
+- A PowerPoint deck: title with overall status, scope and method, control summary, one slide per failing or excepted requirement, attestations, drift, out of scope, evidence index, with a legend strip on every status slide
+- A React dashboard in the shared Illumio style: overview, requirements with expandable tests and evidence, tests per pair, boundary traffic with policy bars and the blocked-per-day timeline, attestations, drift, evidence index, with a colour key and a legend in every section
+
+**Layout:**
+- `SKILL.md` — inputs, scope confirmation, Steps 0 to 8, verification, server gaps, common mistakes
+- `references/tests.md` — tests T1 to T14 with calls, fields, pass rules and the query budget (9 per pair plus 8)
+- `references/matrix-pci-dss.md`, `matrix-dora.md`, `matrix-nis2.md` — requirement to evidence mapping with what Illumio does not cover
+- `references/pack-schema.md` — the JSON pack model every format renders from
+- `references/outputs.md` — the five formats, file names, deck outline
+- `references/pack-template.md` — Markdown and Word structure, colours and legend, appendices
+- `references/dashboard-example.jsx` — working dashboard with synthetic pack data
+
+**Data Sources (via illumio-mcp):**
+- Workload inventory with enforcement mode and VEN health, active rulesets (scope and actor filters), IP lists
+- Boundary traffic in and out of each scope pair by policy decision, traffic summaries
+- Unknown endpoints inside scope subnets (via illumio-unknown-endpoints), draft-versus-active drift, PCE events
