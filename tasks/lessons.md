@@ -46,3 +46,8 @@
 - `git add -A` after running `py_compile` committed a `__pycache__` file into PR #12;
   package.sh pruned it from the zips, the repo still carried it. Add generated
   directories to .gitignore before the first `git add -A`, and read the merge diff.
+
+## 2026-11-04 description limit
+- claude.ai rejects a SKILL.md whose frontmatter description exceeds 1024
+  characters; the rapid-risk-reduction description was 1099 and the v1.2.0 zip
+  would not upload. package.sh now fails the build above 1024.
