@@ -21,7 +21,7 @@ git tag v1.0.0 && git push origin v1.0.0
 
 ## Conventions
 
-- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server).
+- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server). A skill may ship a script that merges and scores the saved tool results (app-profile, rapid-risk-reduction); such a script never talks to the PCE.
 - Colour is used only for meaning. Every dashboard, chart, document table or diagram that uses colour, bold or a tint carries a legend where the colour appears, and decorative colour is one neutral grey.
 
 ## Skills
@@ -76,6 +76,26 @@ Everything about one application, identified by labels (`app=shop, env=prod`): i
 - Read-only: drafts rules as text or a `create-ruleset` call plan, never calls them
 
 **Steps:** connection → labels → workloads (one unfiltered compact call, reused for peer lookup) → traffic summary per direction → rulesets scoped to and naming the app → blocked timeline with spikes → `scripts/app_profile.py` merges and writes the findings → profile.
+
+### illumio-rapid-risk-reduction
+
+**Directory:** `illumio-rapid-risk-reduction/`
+
+What can we block or fence **now** with the least chance of breaking something. Triages the estate (unknown sources on admin ports, admin ports crossing environments, internet-exposed listeners, lateral-movement bridge apps, visibility-mode apps that policy already wants to block, identities with wide reach), scores each exposure by blast radius x ease, and writes a one-page plan: block today, fence this week, isolate on demand, watch. Every fix is a draft call plan marked `DO_NOT_CALL`: override deny rules for unknown admin-port sources, plain denies for environment crossings, selective ringfences with `deny_consumer: any`, and an isolation runbook per crown-jewel app spelled out as tool calls. Nothing is created or provisioned.
+
+**Triggers:** rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, emergency hardening, incident hardening, ransomware quick wins, what to fence first, 24-hour or 7-day plan.
+
+**Prerequisites:**
+- The **illumio-mcp** MCP server, **0.13.1 or later** (`find-unknown-endpoints`, `get-traffic-timeline`, `detect-lateral-movement-paths`, `build-identity-graph`)
+- Python 3 for `scripts/triage.py` (stdlib only)
+
+**Steps:** connection → workloads (one unfiltered compact call) → two traffic summaries (estate, admin ports) → lateral movement → unknown sources → identity graph → rulesets and the blocked timeline → `scripts/triage.py` scores and writes `plan.md` plus `call-plans.md` → the one-page plan. Nine PCE queries in all.
+
+**Layout:**
+- `SKILL.md` — the one question, PCE budget, steps 0 to 7, verification, older servers
+- `references/scoring.md` — exposure classes X1 to X6 and CJ, blast radius and ease tables, buckets, measurement, Illumio semantics
+- `references/report-template.md` — the one-page skeleton and the call-plan appendix
+- `scripts/triage.py` — merge, score, write
 
 ### illumio-security-dashboard
 
