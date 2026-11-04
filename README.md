@@ -63,6 +63,18 @@ Generates a comprehensive Illumio PCE security assessment report as a branded `.
 
 The report is styled with Illumio brand colors and saved as a `.docx` file.
 
+### illumio-rapid-risk-reduction
+
+**Directory:** `illumio-rapid-risk-reduction/`
+
+What can we block or fence **now** with the least chance of breaking something. Triages the estate with the illumio-mcp tools (unknown sources on admin ports, admin ports crossing environment boundaries, lateral-movement bridges, visibility-only apps with blocked inbound), ranks by blast radius x ease, and writes a one-page plan: block today (deny rules on traffic already potentially blocked or from non-workload sources), fence this week (selective ringfences), isolate on demand (override-deny runbooks for crown jewels). Every rule is a draft call plan marked DO_NOT_CALL; nothing is provisioned.
+
+**Triggers:** rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, emergency hardening, ransomware quick wins, what to fence first, 24-hour / 7-day plan.
+
+**Prerequisites:** illumio-mcp **0.13.1 or later**; read-only except drafting.
+
+**Steps:** connection + env labels -> workloads once -> traffic summary -> admin ports as one filtered query -> unknown endpoints -> lateral movement -> identities (optional) -> `scripts/triage.py` scores against `references/scoring.md` and writes the plan and call plans -> write-up with the semantics box and the 7-day review.
+
 ### illumio-app-profile
 
 **Directory:** `illumio-app-profile/`
