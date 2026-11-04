@@ -159,3 +159,21 @@ Rendered at 1280px: Overview (banner, 8 KPIs, severity bar, top issues), Unknown
 - [x] #54 collect-compliance-evidence tool, nis2 (feat/54-compliance-evidence)
 - [x] Review each PR, run the suite on the merged result, merge in order 47, 49, 55, 48, 54, resolve CHANGELOG/server.py conflicts
 - [x] Skills updated to the 0.13 tools: PR #8 (unknown-endpoints) and PR #9 (compliance-evidence) merged; new server gaps filed as #61, #62
+
+# illumio-rapid-risk-reduction (issue #10, 2026-11-04)
+
+Spec: skills issue #10. Server is 0.13.1 (released 2026-10-31); `emergency-isolate-application`
+is an MCP prompt, not a tool, so the runbook spells out its tool calls.
+
+- [ ] Ground truth: tool schemas dumped from the 0.13.1 registry; output shapes of summary,
+      timeline, lateral-movement, infra, unknown-endpoints, identity graph, workloads, rulesets,
+      ringfence dry run (shapes.md in scratchpad)
+- [ ] `references/scoring.md`: triage classes X1-X6, blast radius x ease, buckets today/week/on-demand
+- [ ] `references/report-template.md`: one-page plan skeleton, call-plan blocks marked DO_NOT_CALL
+- [ ] `scripts/triage.py`: merges saved results, scores, writes plan.json, plan.md, call-plans.md;
+      never talks to the PCE; tolerant of missing files
+- [ ] Synthetic fixture in the scratchpad exercising every class; run the script; read the output
+- [ ] `SKILL.md`: one question, PCE budget, steps 0-7, verification, older servers
+- [ ] README entry, package.sh produces the zip, layout check
+- [ ] Cold-read test by a fresh agent (10 scenarios), fix clarity gaps
+- [ ] PR, CI green, link from issue #10
