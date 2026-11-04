@@ -11,7 +11,7 @@ so a change on either side is noticed.
 | # | Exposure | Source | Test | Fix type |
 | --- | --- | --- | --- | --- |
 | X1 | Unknown source reaching workloads on admin ports | `find-unknown-endpoints` (inbound) | `admin_reach` in `profile` | **override deny**: IP list of the sources -> all workloads on the admin ports seen |
-| X2 | Admin ports crossing an environment boundary | admin-port traffic summary, `app_to_app` | `from` and `to` parse to `app (env)` with different `env` | **deny**: `env=<from>` -> `env=<to>` on the admin ports; one rule per environment pair |
+| X2 | Admin ports crossing an environment boundary | admin-port flows (`get-traffic-flows` grouped by source app, destination app, port, proto, policy) | `src_env` and `dst_env` differ on an admin port | **deny**: `env=<from>` -> `env=<to>` on exactly the ports seen; one rule per environment pair |
 | X3 | Internet-exposed listener | `find-unknown-endpoints` (inbound) | `address_class` public with an `as_source` block | **review** the admitting rule (the lists in `ip_lists`, or the default list); a draft rule only through X1 |
 | X4 | Lateral-movement bridge app | `detect-lateral-movement-paths` | listed in `high_risk_bridge_nodes` (`reachable_apps` is observed outbound reach, blocked traffic included) | **selective ringfence** of the app, `deny_consumer: any`: fencing inbound stops the bridge being used as a hop, because an attacker has to get into it first |
 | X5 | App in visibility mode that policy already wants to block | workloads + estate summary | any workload of the app in `visibility_only` or `idle`, and an `app_to_app` row into the app with `potentially_blocked` or `blocked` | **selective ringfence** of the app, then move its workloads to selective |
@@ -25,8 +25,8 @@ ports.
 
 Admin ports are the server's `ADMIN_PORTS`: tcp 21, 22, 23, 88, 135, 139,
 389, 445, 636, 1433, 1521, 2049, 3306, 3389, 5432, 5900, 5985, 5986,
-6379, 9200, 27017 and udp 161. The admin-port summary is filtered to
-exactly this set, so every `app_to_app` row in it is admin traffic.
+6379, 9200, 27017 and udp 161. The admin-port query is filtered to
+exactly this set, so every row in it is admin traffic, with its port.
 
 ## 2. Blast radius (B, 1 to 5)
 
@@ -56,8 +56,8 @@ Which connections "the fix would touch":
 
 - X1: the source's admin-port rows (`as_source.ports` with `admin`
   true).
-- X2: every `app_to_app` row of the environment pair in the admin-port
-  summary.
+- X2: every grouped row of the environment pair in the admin-port
+  flows, all ports together.
 - X4, X5: the inbound rows into the app whose source gets **no allow
   rule** (`unlabelled` or `external:` sources; a labelled remote app
   gets an allow and is not touched). When that set is empty the base is

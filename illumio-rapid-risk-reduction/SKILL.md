@@ -27,7 +27,8 @@ PCE.
   is the tool's input, and say that this skill does not execute writes:
   they can ask for the call outside this skill or use the PCE UI.
 - **Gentle on the PCE.** Eight data pulls plus the connection check:
-  two traffic summaries over the window, one lateral-movement pull, one
+  one traffic summary and one admin-port flow query over the window, one
+  lateral-movement pull, one
   `find-unknown-endpoints` (three requests inside), one identity graph,
   one timeline, one workload pull, one ruleset pull. Reuse every result;
   do not re-query per app. Every pull that takes a window uses the same
@@ -96,7 +97,7 @@ are partial and the plan says so. The estate must label with `app` and
 `env`; with other keys the script stops and says which classes need
 them.
 
-### Step 2: Traffic, two summaries
+### Step 2: Traffic, one summary and the admin-port map
 
 ```
 illumio-mcp:get-traffic-flows-summary
@@ -110,9 +111,9 @@ feed the ringfence allow lists and the visibility-mode test; `blocked`
 rows carry hostnames and ports.
 
 ```
-illumio-mcp:get-traffic-flows-summary
+illumio-mcp:get-traffic-flows
   start_date: "YYYY-MM-DD"   end_date: "YYYY-MM-DD"
-  detail_level: "full"
+  group_by: ["source_app", "dest_app", "port", "proto", "policy"]
   include_services: [
     {"port": 21, "proto": "tcp"}, {"port": 22, "proto": "tcp"}, {"port": 23, "proto": "tcp"},
     {"port": 88, "proto": "tcp"}, {"port": 135, "proto": "tcp"}, {"port": 139, "proto": "tcp"},
@@ -125,18 +126,23 @@ illumio-mcp:get-traffic-flows-summary
   ]
 ```
 
-Saved as `scratch/summary_admin.json`: the admin-port map. Every
-`app_to_app` row in it is admin traffic, so a row whose `from` and `to`
-carry different `env` values is an environment crossing on an admin port
-(X2). The list is the server's `ADMIN_PORTS`; keep it exactly.
+Saved as `scratch/admin_ports.json`: the admin-port map, split format
+(`columns` + `data`) with `src_app`, `src_env`, `dst_app`, `dst_env`,
+`port`, `proto`, `policy_decision`, `num_connections`. A row whose envs
+differ is an environment crossing on that port (X2), so the deny for a
+pair names exactly the ports seen. The list is the server's
+`ADMIN_PORTS`; keep it exactly. `get-traffic-flows` reads at most 500
+raw flows before grouping: `total_pce_flows` of 500 means the admin map
+is a sample, the plan says so, and a shorter window is the fix.
 
 The summary names a non-workload source by its IP-list name, so a public
 source usually shows as `external:Any (0.0.0.0/0 and ::/0)` or
 `unlabelled`; internet exposure is read from Step 4, not from here.
 
-**Capped results.** `totals.truncated` true means the 200k cap was hit.
-Halve the window once and re-pull every window-bound result (both
-summaries, Steps 3 to 6) so all inputs share one window; tell the user.
+**Capped results.** `totals.truncated` on the summary (200k) or
+`total_pce_flows` of 500 on the admin map means a cap was hit. Halve the
+window once and re-pull every window-bound result (Step 2 to Step 6) so
+all inputs share one window; tell the user.
 If it is still capped, keep the results: the script marks the counts as
 lower bounds in the plan header and the lines keep their buckets. The
 same rule applies to `totals.flows_truncated` on Step 4 and Step 6.
@@ -283,7 +289,7 @@ so.
 ## Server gaps
 
 None blocking. A `get-admin-port-exposure` tool (admin-port traffic
-grouped by source env, destination env, port and decision in one call)
-would replace the second summary and give port detail for allowed rows,
-which the summary's `app_to_app` section does not carry. File it on
-illumio-mcp-server if Step 2 proves expensive on a large estate.
+grouped by source env, destination env, port and decision, read through
+the 200k summary path instead of the 500-flow `get-traffic-flows` path)
+would make the admin map complete on a large estate. File it on
+illumio-mcp-server when `total_pce_flows` hits 500 on a one-week window.

@@ -5,7 +5,8 @@ the exposures and write the one-page plan with its call plans.
 Inputs (<scratch>/, all optional except workloads; missing files are reported):
   workloads.json       get-workloads, compact, UNFILTERED
   summary.json         get-traffic-flows-summary over the window, unfiltered, detail_level full
-  summary_admin.json   the same with include_services = the admin ports
+  admin_ports.json     get-traffic-flows grouped by source_app, dest_app, port, proto, policy,
+                       filtered to the admin ports (split format; 500-flow cap)
   lateral.json         detect-lateral-movement-paths
   unknown.json         find-unknown-endpoints, direction inbound
   identities.json      build-identity-graph, include_service_accounts false
@@ -225,42 +226,47 @@ def x3_public_sources(unknown: dict | None, x1_ips: set) -> list[dict]:
     return sorted(lines, key=lambda l: (-l["allowed_into_enforced"], -l["peer_workloads"]))
 
 
-def x2_env_crossings(admin: dict | None, hosts: dict, prod: list[str], rs: dict | None = None) -> list[dict]:
-    if not admin:
-        return []
+def x2_env_crossings(admin: dict | None, prod: list[str], rs: dict | None = None) -> list[dict]:
+    """Grouped get-traffic-flows rows: src_app, src_env, dst_app, dst_env, port, proto,
+    policy_decision, num_connections. Only admin ports, only rows with both envs labelled."""
     groups: dict[tuple, dict] = {}
-    for row in admin.get("app_to_app", []):
-        a, b = parse_identity(row.get("from")), parse_identity(row.get("to"))
-        if not a or not b or a[1] == b[1]:
+    for row in split_rows(admin):
+        a = (str(row.get("src_app")), str(row.get("src_env"))) if row.get("src_app") and row.get("src_env") else None
+        b = (str(row.get("dst_app")), str(row.get("dst_env"))) if row.get("dst_app") and row.get("dst_env") else None
+        try:
+            port, proto = int(row.get("port")), proto_name(row.get("proto"))
+        except (TypeError, ValueError):
             continue
-        g = groups.setdefault((a[1], b[1]), {"counts": Counter(), "pairs": Counter(), "dst_apps": set(), "src_apps": set()})
-        g["counts"][row.get("policy")] += row.get("connections", 0)
-        g["pairs"][(row["from"], row["to"], row.get("policy"))] += row.get("connections", 0)
+        if not a or not b or a[1] == b[1] or (port, proto) not in ADMIN_SET:
+            continue
+        n = int(row.get("num_connections") or 0)
+        dec = row.get("policy_decision") or "unknown"
+        g = groups.setdefault((a[1], b[1]), {"counts": Counter(), "pairs": Counter(), "dst_apps": set(), "src_apps": set(),
+                                             "ports": Counter(), "port_mix": defaultdict(Counter)})
+        g["counts"][dec] += n
+        g["pairs"][(f"{a[0]} ({a[1]})", f"{b[0]} ({b[1]})", dec)] += n
         g["dst_apps"].add(b)
         g["src_apps"].add(a)
-    # port detail from the blocked section (hostnames -> env via the inventory)
-    ports: dict[tuple, Counter] = defaultdict(Counter)
-    for row in admin.get("blocked", []):
-        s, d = hosts.get(str(row.get("src_label"))), hosts.get(str(row.get("dst_label")))
-        if s and d and s.get("env") and d.get("env") and s["env"] != d["env"]:
-            ports[(str(s["env"]), str(d["env"]))][f"{row.get('port')}/{proto_name(row.get('proto'))}"] += row.get("connections", 0)
+        g["ports"][f"{port}/{proto}"] += n
+        g["port_mix"][f"{port}/{proto}"][dec] += n
     lines = []
     for (src_env, dst_env), g in groups.items():
         m = mix(g["counts"])
         b = scale(len(g["dst_apps"]), (2, 3, 5, 10))
         ease = clamp(ease_base(m) + 1)
-        seen_ports = ports.get((src_env, dst_env), Counter())
+        seen_ports = g["ports"]
         lines.append({
             "class": "X2", "kind": "deny", "score": b * ease, "blast_radius": b, "ease": ease,
             "title": f"admin ports env={src_env} -> env={dst_env}" + (" (production)" if dst_env in prod else ""),
             "src_env": src_env, "dst_env": dst_env, "to_production": dst_env in prod,
             "dst_apps": sorted(f"{a} ({e})" for a, e in g["dst_apps"]),
             "src_apps": sorted(f"{a} ({e})" for a, e in g["src_apps"]),
-            "ports_seen": [f"{p} ({n})" for p, n in seen_ports.most_common(8)] or ["ports not itemised for allowed rows; the rule covers the admin set"],
+            "ports_seen": [f"{p} ({n}: {', '.join(f'{d} {c}' for d, c in g['port_mix'][p].items())})" for p, n in seen_ports.most_common(8)],
+            "ports": sorted(seen_ports, key=lambda x: int(x.split('/')[0])),
             "app_pairs": [{"from": f, "to": t, "policy": p, "connections": n}
                           for (f, t, p), n in sorted(g["pairs"].items(), key=lambda kv: -kv[1])[:10]],
             "would_have_blocked": m, "admitting_rules": admitting_rules(rs, src_env, dst_env) if m["allowed"] else [],
-            "evidence": [f"admin-port summary app_to_app rows env={src_env} -> env={dst_env} ({len(g['pairs'])} rows)"],
+            "evidence": [f"admin-port flows rows env={src_env} -> env={dst_env} ({len(g['pairs'])} app pairs, {len(seen_ports)} ports)"],
             "rollback": "delete the deny rule from the draft ruleset",
         })
     return sorted(lines, key=lambda l: (-l["to_production"], -l["score"]))
@@ -434,7 +440,7 @@ def call_plans(p: dict) -> list[dict]:
         if l["class"] == "X2":
             plans.append({"for": f"X2 {l['src_env']}->{l['dst_env']}", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review",
                           "ruleset_name": rs, "consumers": [f"env={l['src_env']}"], "providers": [f"env={l['dst_env']}"],
-                          "ingress_services": [{"port": port, "proto": proto} for port, proto in ADMIN_PORTS],
+                          "ingress_services": [{"port": int(ps.split('/')[0]), "proto": ps.split('/')[1]} for ps in l["ports"]],
                           "override_deny": False, "unscoped_consumers": True,
                           "_notes": {"enforced_on": f"managed workloads carrying env={l['src_env']} in selective or full enforcement",
                                      "would_have_blocked": l["would_have_blocked"], "admitting_rules": l.get("admitting_rules", [])}})
@@ -602,7 +608,7 @@ def main(argv=None) -> int:
     ap.add_argument("--date", default=date.today().isoformat(), help="YYYY-MM-DD used in the draft ruleset name")
     a = ap.parse_args(argv)
 
-    names = ("workloads", "summary", "summary_admin", "lateral", "unknown", "identities", "rulesets", "timeline")
+    names = ("workloads", "summary", "admin_ports", "lateral", "unknown", "identities", "rulesets", "timeline")
     files = {n: a.scratch / f"{n}.json" for n in names}
     data = {n: load(f) for n, f in files.items()}
     if data["workloads"] is None:
@@ -615,7 +621,7 @@ def main(argv=None) -> int:
     prod = pick_prod_envs(a.prod_env, wl["envs"])
     policy = existing_policy(data["rulesets"])
     x1 = x1_unknown_admin(data["unknown"], policy)
-    x2 = x2_env_crossings(data["summary_admin"], wl["hosts"], prod, data["rulesets"])
+    x2 = x2_env_crossings(data["admin_ports"], prod, data["rulesets"])
     fences = ringfence_lines(data["lateral"], wl, data["summary"], policy)
     x3 = x3_public_sources(data["unknown"], {l["ip"] for l in x1})
     x6 = x6_identities(data["identities"])
@@ -628,7 +634,7 @@ def main(argv=None) -> int:
     truncated = {
         "workloads": bool(wl_env.get("truncated")) or wl_env.get("total", 0) >= 10000,
         "summary": bool(((data["summary"] or {}).get("totals") or {}).get("truncated")),
-        "summary_admin": bool(((data["summary_admin"] or {}).get("totals") or {}).get("truncated")),
+        "admin_ports": bool((data["admin_ports"] or {}).get("truncated")) or int((data["admin_ports"] or {}).get("total_pce_flows") or 0) >= 500,
         "unknown": bool(((data["unknown"] or {}).get("totals") or {}).get("flows_truncated")),
         "timeline": bool(((data["timeline"] or {}).get("totals") or {}).get("flows_truncated")),
     }
