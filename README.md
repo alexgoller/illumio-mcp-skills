@@ -81,7 +81,7 @@ Everything about one application, identified by labels (`app=shop, env=prod`): i
 
 **Directory:** `illumio-rapid-risk-reduction/`
 
-What can we block or fence **now** with the least chance of breaking something. Triages the estate (unknown sources on admin ports, admin ports crossing environments, internet-exposed listeners, lateral-movement bridge apps, visibility-mode apps that policy already wants to block, identities with wide reach), scores each exposure by blast radius x ease, and writes a one-page plan: block today, fence this week, isolate on demand, watch. Every fix is a draft call plan marked `DO_NOT_CALL`: override deny rules for unknown admin-port sources, plain denies for environment crossings, selective ringfences with `deny_consumer: any`, and an isolation runbook per crown-jewel app spelled out as tool calls. Nothing is created or provisioned.
+What can we block or fence **now** with the least chance of breaking something. Triages the estate (unknown sources on admin ports, admin ports crossing environments, internet-exposed listeners, lateral-movement bridge apps, visibility-mode apps that policy already wants to block, identities with wide reach), scores each exposure by blast radius x ease, and produces three views of one result: a one-page plan (block today, fence this week, isolate on demand, watch), a risk report (risk, what was seen, evidence and recommended action per exposure) and a single-file React dashboard in the Illumio style. Every fix is a draft call plan marked `DO_NOT_CALL`: override deny rules for unknown admin-port sources, plain denies for environment crossings, selective ringfences with `deny_consumer: any`, and an isolation runbook per crown-jewel app spelled out as tool calls. Nothing is created or provisioned.
 
 **Triggers:** rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, emergency hardening, incident hardening, ransomware quick wins, what to fence first, 24-hour or 7-day plan.
 
@@ -89,13 +89,15 @@ What can we block or fence **now** with the least chance of breaking something. 
 - The **illumio-mcp** MCP server, **0.13.1 or later** (`find-unknown-endpoints`, `get-traffic-timeline`, `detect-lateral-movement-paths`, `build-identity-graph`)
 - Python 3 for `scripts/triage.py` (stdlib only)
 
-**Steps:** connection → workloads (one unfiltered compact call) → two traffic summaries (estate, admin ports) → lateral movement → unknown sources → identity graph → rulesets and the blocked timeline → `scripts/triage.py` scores and writes `plan.md` plus `call-plans.md` → the one-page plan. Nine PCE queries in all.
+**Steps:** the one question → connection → workloads (one unfiltered compact call) → the estate traffic summary and the admin-port flows grouped by app pair and port → lateral movement → unknown sources → identity graph → rulesets and the blocked timeline → `scripts/triage.py` scores and writes `plan.md`, `call-plans.md`, `report.md` and `dashboard.jsx` from one `plan.json` → present the plan, the dashboard and, on request, the report. Eight data pulls plus the connection check.
 
 **Layout:**
 - `SKILL.md` — the one question, PCE budget, steps 0 to 7, verification, older servers
 - `references/scoring.md` — exposure classes X1 to X6 and CJ, blast radius and ease tables, buckets, measurement, Illumio semantics
 - `references/report-template.md` — the one-page skeleton and the call-plan appendix
-- `scripts/triage.py` — merge, score, write
+- `references/risk-report-template.md` — the risk report: register, risk and recommendation per exposure
+- `references/dashboard-spec.md` and `references/dashboard-example.jsx` — the dashboard: colour mapping, data constants, tabs, checklist; the example is also the template the script fills
+- `scripts/triage.py` — merge, score, write all three views
 
 ### illumio-security-dashboard
 

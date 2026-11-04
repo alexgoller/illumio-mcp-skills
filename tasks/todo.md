@@ -189,3 +189,27 @@ workloads-only fixture (empty plan, missing inputs named). Cold-read by a fresh 
 gaps, 3 of them contradictions (stop vs continue on an old server, narrow vs annotate on a
 capped query, a ringfence ease the sample did not reproduce); all fixed in script and docs.
 Not run against a live PCE.
+
+# Rapid risk reduction: dashboard and risk report (2026-11-04)
+
+Requests: "add a jsx dashboards similar to the ones we did before to the skill" and "make this a
+report too, where we would see the risk and the tool recommends what to do".
+
+- [x] `scripts/triage.py` writes `report.md` (executive summary, risk register, risk / what we saw /
+      evidence / recommendation / rollback per exposure, watch items, runbooks, baseline, method)
+- [x] `scripts/triage.py` writes `dashboard.jsx` by filling the DATA block of
+      `references/dashboard-example.jsx`; the example carries the fixture data and is the template
+- [x] `references/dashboard-spec.md` (shared conventions, colour mapping, data constants, tabs,
+      checklist) and `references/risk-report-template.md`
+- [x] SKILL.md: three views from one plan.json, Step 8 Present, files table, verification;
+      README entry; description kept under 1024
+- [x] Verified: both fixtures render all 7 tabs with 0 errors and a legend per section;
+      screenshots of Overview, Block today and Baseline inspected; example DATA block equals a
+      fresh run
+- [x] PR #15, CI green
+
+## Review
+
+One `plan.json` feeds plan.md, report.md and dashboard.jsx, so the three cannot disagree. The
+dashboard is generated, not hand-built: the example file doubles as the template. The empty
+fixture renders every tab with one grey sentence per section and a green banner.

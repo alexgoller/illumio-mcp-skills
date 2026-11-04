@@ -1,20 +1,24 @@
 ---
 name: illumio-rapid-risk-reduction
-description: "Use when the user asks what they can block or fence now with the least chance of breaking something on an Illumio PCE: rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, emergency or incident hardening, ransomware quick wins, what to fence first, a 24-hour or 7-day plan, what to isolate first. Triages the estate with illumio-mcp tools (unknown sources on admin ports, admin ports crossing environments, internet-exposed listeners, lateral-movement bridge apps, visibility-mode apps policy already blocks, identities with wide reach), ranks each exposure by blast radius x ease, and writes a one-page plan with draft-only policy: override deny and deny rules, selective ringfences, an isolation runbook per crown-jewel app, each with evidence, what it would have blocked and its rollback. Never provisions. Not for one app (illumio-app-profile), audit evidence (illumio-compliance-evidence) or estate reports (illumio-pce-assessment). Requires illumio-mcp-server 0.13.1 or later."
+description: "Use when the user asks what they can block or fence now with the least chance of breaking something on an Illumio PCE: rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, incident hardening, ransomware quick wins, what to fence first, a 24-hour or 7-day plan. Triages the estate with illumio-mcp tools (unknown admin-port sources, environment-crossing admin ports, internet-exposed listeners, lateral-movement bridges, non-enforcing apps policy already blocks, wide-reach identities), ranks each exposure by blast radius x ease, and produces a one-page plan, a risk report (risk, evidence, recommendation per exposure) and a React dashboard, all draft-only: override deny and deny rules, selective ringfences, an isolation runbook per crown-jewel app, each with its rollback. Never provisions. Not for one app, audit evidence or estate reports (illumio-app-profile, illumio-compliance-evidence, illumio-pce-assessment). Requires illumio-mcp-server 0.13.1 or later."
 ---
 
 # Illumio Rapid Risk Reduction
 
 One workflow for "what can we block or fence **now** with the least chance
 of breaking something". It reads the estate once, scores every exposure
-by blast radius x ease, and writes a one-page plan: block these today,
-fence these this week, isolate these on demand, watch these. Every fix is
-a draft call plan marked `DO_NOT_CALL`; the skill creates and provisions
-nothing.
+by blast radius x ease, and produces three views of one result:
 
-Everything comes from illumio-mcp tool calls. `scripts/triage.py` merges
-the saved results, scores them and writes the plan; it never talks to the
-PCE.
+- the **plan**, one page: block these today, fence these this week,
+  isolate these on demand, watch these;
+- the **risk report**: every exposure with the risk it carries, what was
+  seen, the evidence, and the recommended action;
+- the **dashboard**, a single-file React artifact in the Illumio style.
+
+Every fix is a draft call plan marked `DO_NOT_CALL`; the skill creates
+and provisions nothing. Everything comes from illumio-mcp tool calls.
+`scripts/triage.py` merges the saved results, scores them and writes all
+three views from one `plan.json`; it never talks to the PCE.
 
 ## Constraints
 
@@ -43,10 +47,11 @@ PCE.
 - **Ask one question up front** (Step 0) covering: window (default 30
   days), which `env` values are production (default: values containing
   `prod`), crown-jewel apps as `app (env)` (optional; default: the three
-  production bridge apps with the largest reach), and output format
-  (default markdown in chat; Claude Doc or .docx on request). Ask nothing
-  else; the user answers with their own label values, and the plan's
-  header states what was assumed.
+  production bridge apps with the largest reach), and output (default:
+  the plan in chat plus the dashboard artifact; the report on request,
+  as markdown, Claude Doc or .docx). Ask nothing else; the user answers
+  with their own label values, and the plan's header states what was
+  assumed.
 
 ## Files
 
@@ -54,7 +59,10 @@ PCE.
 | --- | --- |
 | `references/scoring.md` | exposure classes X1 to X6 and CJ, blast radius and ease tables, buckets, measurement, the Illumio semantics every plan states |
 | `references/report-template.md` | the one-page plan skeleton and the appendix of call plans |
-| `scripts/triage.py` | merges the saved tool results, scores, writes `plan.json`, `plan.md`, `call-plans.md` |
+| `references/risk-report-template.md` | the risk report: register, risk and recommendation per exposure |
+| `references/dashboard-spec.md` | the dashboard: colour mapping, data constants, tabs, checklist |
+| `references/dashboard-example.jsx` | the dashboard template the script fills, and a worked example |
+| `scripts/triage.py` | merges the saved tool results, scores, writes `plan.json`, `plan.md`, `call-plans.md`, `report.md`, `dashboard.jsx` |
 
 ## Workflow
 
@@ -233,18 +241,28 @@ question in Step 0; omit `--prod-env` to use every `env` value containing
 `prod`, omit `--crown` to default to the three production bridge apps with
 the largest reach. A crown jewel with no workloads in the inventory still
 gets its runbook, flagged "not found, check the label values". Writes
-`plan.json` (every line with its evidence, scores and call plans),
-`plan.md` (the one page) and `call-plans.md` (the appendix). The script
-is tolerant of missing files and says in `plan.json["inputs"]` what it
+`plan.json` (every line with its evidence, scores, recommendation and
+call plans), `plan.md` (the one page), `call-plans.md` (the appendix),
+`report.md` (the risk report) and `dashboard.jsx` (the template in
+`references/` with the plan's data in its DATA block). The script is
+tolerant of missing files and says in `plan.json["inputs"]` what it
 read; a missing input empties its exposure class, it does not invent one.
 
-Then write the plan following `references/report-template.md`: the
-header with the assumptions, the four lists, the baseline, the appendix.
-Keep the script's numbers; do not re-derive a score from prose. When the
-user asked for a Claude Doc or .docx, render the same content there
-(pipe-delimited lines become table rows; the docx skill builds the file);
-see the template's colour section for the only colour mapping allowed and
-the legend every coloured table ends with.
+### Step 8: Present
+
+- **Plan**: `plan.md` follows `references/report-template.md`; present it
+  in chat with the header assumptions. Keep the script's numbers; do not
+  re-derive a score from prose.
+- **Dashboard**: save `dashboard.jsx` as
+  `/mnt/user-data/outputs/illumio_rapid_risk_reduction_<date>.jsx` when
+  that directory exists, else next to the plan, and present it; it
+  renders as an artifact. `references/dashboard-spec.md` has the
+  checklist. Never hand-build it from prose.
+- **Report** (when asked for a report or a document): `report.md`
+  follows `references/risk-report-template.md`; as a Claude Doc or a
+  .docx through the docx skill, pipe-delimited rows become table rows.
+  A .docx with status cells uses only the dashboard's colour mapping and
+  every coloured table ends with a legend.
 
 ### Verification
 
@@ -254,9 +272,12 @@ ringfence line says "selective" with `deny_consumer any`, and its call
 plan carries `"deny_consumer": "any"`; every call plan block carries
 `DO_NOT_CALL`; every runbook ends in `provision-policy` with its undo; no
 spike is quoted that carried a caveat; and every result's cap flag is
-false, or the plan header names the counts that are lower bounds. Nothing
-was created: the transcript holds no `create-*`, `update-*`, `delete-*`,
-`provision-policy` or `ringfence-batch` call.
+false, or the plan header names the counts that are lower bounds. The
+dashboard's KPIs and the report's register show the same numbers as the
+plan (they come from one `plan.json`); the dashboard renders every tab
+with the data it has. Nothing was created: the transcript holds no
+`create-*`, `update-*`, `delete-*`, `provision-policy` or
+`ringfence-batch` call.
 
 ## Mistakes this skill avoids
 
