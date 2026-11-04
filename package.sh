@@ -14,6 +14,11 @@ for dir in */; do
   [ -f "$dir/SKILL.md" ] || continue
   name=$(sed -n 's/^name:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/p' "$dir/SKILL.md" | head -1)
   name=${name:-$dir}
+  desc_len=$(sed -n 's/^description:[[:space:]]*"\{0,1\}\(.*\)"\{0,1\}$/\1/p' "$dir/SKILL.md" | head -1 | wc -c)
+  if [ "$desc_len" -gt 1024 ]; then
+    echo "$dir/SKILL.md: description is $desc_len characters; claude.ai accepts at most 1024" >&2
+    exit 1
+  fi
   cp -R "$dir" "$stage/$name"
   find "$stage/$name" \( -name .DS_Store -o -name __pycache__ \) -prune -exec rm -rf {} +
   (cd "$stage" && zip -qr -X "$OLDPWD/dist/$name.zip" "$name")
