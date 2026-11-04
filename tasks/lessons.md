@@ -51,3 +51,8 @@
 - claude.ai rejects a SKILL.md whose frontmatter description exceeds 1024
   characters; the rapid-risk-reduction description was 1099 and the v1.2.0 zip
   would not upload. package.sh now fails the build above 1024.
+
+## 2026-11-04 marker strings
+- A DATA-block marker mentioned in a header comment matched before the real
+  marker and the generated file declared every constant twice. Search for
+  markers on their own line (newline-wrapped), never as a bare substring.

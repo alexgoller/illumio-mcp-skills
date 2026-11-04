@@ -13,7 +13,10 @@ Inputs (<scratch>/, all optional except workloads; missing files are reported):
   rulesets.json        get-rulesets, pversion draft, unfiltered
   timeline.json        get-traffic-timeline, blocked + potentially_blocked, bucket 1d, spikes
 
-Outputs: <out>/plan.json, <out>/plan.md, <out>/call-plans.md.
+Outputs: <out>/plan.json, <out>/plan.md (the one page), <out>/call-plans.md,
+<out>/report.md (the risk report: every exposure with its risk, evidence and
+recommendation) and <out>/dashboard.jsx (the template in references/ with the
+plan's data in its DATA block).
 
 The script never talks to the PCE. Every rule it writes is a draft for
 review marked DO_NOT_CALL; nothing is created or provisioned.
@@ -399,6 +402,7 @@ def baseline(t: dict | None) -> dict:
     return {"available": True, "bucket": t.get("bucket"), "effective_bucket": t.get("effective_bucket"),
             "days": len(series), "total_flows": sum(flows), "median_nonzero": median,
             "worst": None if sp.get("caveat") else sp.get("worst"), "caveat": sp.get("caveat"),
+            "threshold": sp.get("threshold"), "spike_buckets": sp.get("buckets") or [],
             "truncated": (t.get("totals") or {}).get("flows_truncated", False)}
 
 
@@ -473,6 +477,76 @@ def call_plans(p: dict) -> list[dict]:
 
 
 # --------------------------------------------------------------------- outputs
+
+WHY = {
+    "X1": "A host the PCE does not know as a workload is reaching workloads on administrative ports. "
+          "That is how lateral movement and ransomware staging look from the network: no VEN, no label, no owner.",
+    "X2": "Administrative protocols crossing an environment boundary let a compromise in one environment "
+          "reach another through the ports attackers use first.",
+    "X4": "A bridge app connects groups of applications that would otherwise be isolated; a compromise "
+          "there reaches the most apps in the fewest hops.",
+    "X5": "The app is not enforcing, yet policy already marks inbound traffic to it as blocked or potentially "
+          "blocked: the decision has been made and is not being applied.",
+    "X3": "A public address reaches workloads directly: the listener is internet-exposed, admitted by a rule or "
+          "a broad IP list.",
+    "X6": "An interactive account active from many workloads or reaching many apps is a shared credential or an "
+          "over-reaching user; policy cannot name an identity, so this is a question for the owner.",
+}
+
+
+def action(l: dict) -> str:
+    """One clause for tables: what to do, when."""
+    when = "today" if l.get("bucket") == "today" else "this week"
+    if l["class"] == "X1":
+        return f"override deny from an IP list of the source to all workloads on {', '.join(l['admin_ports'])}, {when}"
+    if l["class"] == "X2":
+        return f"deny env={l['src_env']} -> env={l['dst_env']} on {', '.join(l['ports'])}, {when}" + (" after review" if l["ease"] < 4 else "")
+    return f"selective ringfence RF-{l['app']}-{l['env']}, deny_consumer any, {when}" + ("; then selective enforcement" if "visibility" in l["why"] else "")
+
+
+def recommendation(l: dict) -> str:
+    wb = l["would_have_blocked"]
+    when = "today" if l.get("bucket") == "today" else "this week"
+    if l["class"] == "X1":
+        r = (f"Draft an override deny from an IP list holding {l['ip']} to all workloads on {', '.join(l['admin_ports'])} "
+             f"in {l['ruleset']} ({when}). Override deny on purpose: it must hold even where an allow admits the source.")
+        if wb["allowed"] and l["ease"] < 4:
+            r += f" {wb['allowed']} allowed connections would stop; confirm admin access from this source may end first."
+        return r
+    if l["class"] == "X2":
+        r = (f"Draft a deny env={l['src_env']} -> env={l['dst_env']} on {', '.join(l['ports'])} in {l['ruleset']} ({when}); "
+             f"enforced on managed workloads carrying env={l['src_env']} in selective or full enforcement.")
+        if wb["allowed"] and l["ease"] < 4:
+            r += (f" {wb['allowed']} allowed connections would stop, admitted by: "
+                  + ("; ".join(l.get("admitting_rules") or []) or "no rule naming these envs (a broader rule or an IP list)") + "; confirm first.")
+        return r
+    al = l["allow_list"]
+    r = (f"Preview, then draft a selective ringfence RF-{l['app']}-{l['env']} with deny_consumer any ({when}): "
+         f"allow rules for {len(al['remote_apps'])} observed inbound remote apps ({al['already_allowed']} already allowed), "
+         f"a deny for everything else, enforced at the app's own workloads.")
+    if not al["remote_apps"]:
+        r += " No inbound app traffic was observed, so the fence denies all inbound."
+    if al["no_rule_possible"]["connections"]:
+        r += f" {al['no_rule_possible']['connections']} connections from unlabelled or IP-list sources get no allow and will hit the deny; label or list them first if they matter."
+    if "visibility" in l["why"]:
+        r += f" Then move the app's {l['why']['visibility']['workloads_not_enforcing']} non-enforcing workloads to selective enforcement (update-workload, not drafted here)."
+    if l["already_fenced"]:
+        r += " A ringfence already exists in draft; review and provision that one instead."
+    return r
+
+
+def watch_action(w: dict) -> str:
+    return "find the admitting rule or list and narrow it" if w["class"] == "X3" else "confirm the account's reach with its owner"
+
+
+def watch_recommendation(w: dict) -> str:
+    if w["class"] == "X3":
+        base = f"No draft rule. Find the rule or list admitting {w['ip']}: {', '.join(w['ip_lists']) or 'the default Any list or a broad rule'}; narrow it or add the address to a named list."
+        return base + (" Its admin ports are covered by the X1 override deny." if w.get("also_x1") else "")
+    return (f"No Illumio rule can name an identity. Confirm with the owner whether {w['identity']} should be active from "
+            f"{w['observed_on_workloads']} workloads across {w['distinct_apps']} apps"
+            + (f"; the admin ports it uses ({', '.join(w['admin_ports'])}) are what the X1 and X2 denies narrow." if w["admin_ports"] else "."))
+
 
 def wb_text(m: dict) -> str:
     return f"{m.get('allowed', 0)}/{m.get('potentially_blocked', 0)}/{m.get('blocked', 0)}"
@@ -589,6 +663,148 @@ def write_call_plans(path: pathlib.Path, p: dict) -> None:
     path.write_text("\n".join(L) + "\n")
 
 
+def line_detail(l: dict) -> str:
+    t = details(l)[0].strip().lstrip("- ").strip()
+    return t[5:] if t.startswith("why: ") else t
+
+
+def write_report_md(path: pathlib.Path, p: dict) -> None:
+    b = p["buckets"]
+    L = [f"# Rapid risk reduction report, {p['date']}\n",
+         f"Window {p['window'].get('start') or '?'} to {p['window'].get('end') or '?'} ({p['window_days']} days). "
+         f"Production environments: {', '.join(p['production_envs']) or 'none identified'}. "
+         f"Crown jewels: {', '.join(f'{a} ({e})' for a, e in p['crown_jewels']) or 'none'} ({p['crown_jewels_source']}). "
+         f"Draft ruleset `{p['ruleset_name']}`. Nothing in this report is created or provisioned."]
+    caps = [k for k, v in p["truncated"].items() if v]
+    if caps:
+        L.append(f"Counts are lower bounds on: {', '.join(caps)} (a query hit its cap).")
+    L.append("\n## 1. Executive summary\n")
+    allowed_stop = sum(l["would_have_blocked"].get("allowed", 0) for l in b["today"] + b["week"] if l["kind"] != "ringfence")
+    L.append(f"{len(p['lines'])} exposures have a draft fix: {len(b['today'])} can be blocked today with little chance of breaking anything, "
+             f"{len(b['week'])} need a review or a ringfence this week, {len(p['crown_jewels'])} crown-jewel app{'s have' if len(p['crown_jewels']) != 1 else ' has'} an isolation runbook in reserve, "
+             f"and {len(p['watch'])} observations have no rule to draft. Across every deny line, {allowed_stop} currently allowed connections would stop; "
+             f"everything else the rules touch is already blocked or admitted by no rule.")
+    top = sorted(p["lines"], key=lambda l: -l["score"])[:3]
+    for l in top:
+        L.append(f"- **{l['score']}** {l['class']} {l['title']}: {l['action']}.")
+    L.append("\n## 2. Risk register\n")
+    L.append("| # | Risk | Score | Blast radius | Ease | Would have blocked (allowed/pb/blocked) | Recommended action | When |")
+    L.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+    for i, l in enumerate(sorted(p["lines"], key=lambda l: -l["score"]), 1):
+        L.append(f"| {i} | {l['class']} {l['title']} | {l['score']} | {l['blast_radius']} | {l['ease']} | {wb_text(l['would_have_blocked'])} | {l['action']} | {'today' if l['bucket'] == 'today' else 'this week'} |")
+    for w in p["watch"]:
+        L.append(f"| – | {w['class']} {w.get('ip') or w.get('identity')} | – | {w['blast_radius']} | – | – | watch: {w['action']} | now |")
+    L.append("\nScore = blast radius x ease (1 to 25); see references/scoring.md for the thresholds. Would have blocked counts the window's connections the rule matches, by policy decision: allowed is what would really stop, the rest is what the rule makes permanent.")
+    L.append("\n## 3. Risks in detail\n")
+    for l in sorted(p["lines"], key=lambda l: -l["score"]):
+        cls = l["class"].split("+")[0]
+        L.append(f"### {l['score']} · {l['class']} {l['title']}\n")
+        L.append(f"**Risk.** {WHY.get(cls, '')}")
+        L.append(f"\n**What we saw.** {line_detail(l)}")
+        L.append(f"\n**Evidence.** {'; '.join(l['evidence'])}. Blast radius {l['blast_radius']}, ease {l['ease']}, would have blocked {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked).")
+        L.append(f"\n**Recommendation.** {l['recommendation']}")
+        L.append(f"\n**Rollback.** {l['rollback']}.\n")
+    L.append("## 4. Observations without a rule\n")
+    for w in p["watch"]:
+        cls = w["class"]
+        who = (f"{w['ip']}{' ' + w['fqdn'] if w.get('fqdn') else ''}" if cls == "X3" else w["identity"])
+        seen = (f"reaches {w['peer_workloads']} workloads on {', '.join(w['ports']) or 'admin ports only'}; allowed into enforced: {w['allowed_into_enforced']}; "
+                f"admitted by: {', '.join(w['ip_lists']) or 'no named list'}" if cls == "X3"
+                else f"{'; '.join(w['why'])}; {w['observed_on_workloads']} workloads, {w['distinct_apps']} apps" + (f"; admin ports {', '.join(w['admin_ports'])}" if w["admin_ports"] else ""))
+        L.append(f"### {cls} {who}\n\n**Risk.** {WHY.get(cls, '')}\n\n**What we saw.** {seen}.\n\n**Recommendation.** {w['recommendation']}\n")
+    if not p["watch"]:
+        L.append("None.\n")
+    L.append("## 5. Isolation runbooks (incident use only)\n")
+    for app, env in p["crown_jewels"]:
+        n = p["crown_jewel_workloads"].get(f"{app} ({env})", 0)
+        L.append(f"- **EMERGENCY-ISOLATE-{app}-{env}** ({n} workloads in inventory{'; not found, check the label values' if not n else ''}): "
+                 f"get-labels, create-ruleset scoped to the app, create-deny-rule with override_deny true (providers ams, consumers ams and Any, All Services, unscoped_consumers true), "
+                 f"an optional outbound rule in an unscoped ruleset, then provision-policy. Effect: all traffic to the app stops, allow rules included. Undo: delete the override deny rules and provision again.")
+    if not p["crown_jewels"]:
+        L.append("None: no crown jewels given and no production bridge app; name one as app (env) and re-run.")
+    L.append("\n## 6. Baseline and 7-day review\n")
+    bl = p["baseline"]
+    if bl.get("available"):
+        L.append(f"Blocked and potentially blocked flows per {bl['effective_bucket'] or bl['bucket']} over {bl['days']} buckets: median {bl['median_nonzero']}, total {bl['total_flows']}"
+                 + (" (capped; lower bound)" if bl.get("truncated") else "") + ". "
+                 + (f"No spike quoted: {bl['caveat']}" if bl.get("caveat") else f"Worst spike {bl['worst']['bucket_start']} with {bl['worst']['flows']} flows, {bl['worst']['multiple']}x the median." if bl.get("worst") else "No bucket above 3x the median."))
+    else:
+        L.append("No timeline saved; run get-traffic-timeline for the baseline.")
+    L.append("Re-run the timeline 7 days after provisioning: blocked rows should rise and potentially blocked fall, and nothing else should move. Re-run this skill with the same window; lines whose rule is active should show their traffic as blocked.")
+    L.append("\n## 7. Method and semantics\n")
+    L.append("Eight read-only illumio-mcp pulls over one window: workloads, the estate traffic summary, the admin-port flows grouped by app pair and port, lateral-movement paths, unknown endpoints, the identity graph, draft rulesets and the blocked timeline. "
+             "Override deny is evaluated before allow rules and is used only for unknown admin-port sources and the runbooks. A regular deny catches what no allow admits and needs selective or full enforcement to bite. "
+             "A selective ringfence needs its deny rule. Deny rules with a label consumer are enforced on the source workloads; with an IP-list consumer at the destination, which is why deny_consumer any is the safest flavour. "
+             "Rollback of any draft is deleting it; nothing here is provisioned. Call plans are in call-plans.md, every block marked DO_NOT_CALL.")
+    path.write_text("\n".join(L) + "\n")
+
+
+def dashboard_data(p: dict) -> str:
+    def wb(m):
+        return {"allowed": m.get("allowed", 0), "potentiallyBlocked": m.get("potentially_blocked", 0), "blocked": m.get("blocked", 0)}
+    def radius(l):
+        if l["kind"] == "ringfence":
+            return (f"reaches {l['why']['bridge']['reachable_apps']} apps, " if "bridge" in l["why"] else "") + f"{l['workloads']} workloads"
+        return {"X1": f"{l.get('peer_workloads', 0)} workloads, {l.get('peers_enforced', 0)} enforced",
+                "X2": f"{len(l.get('dst_apps', []))} destination apps"}.get(l["class"], "")
+    lines = [{"id": f"L{i}", "cls": l["class"], "kind": l["kind"], "bucket": l["bucket"], "score": l["score"], "blast": l["blast_radius"], "ease": l["ease"],
+              "title": l["title"], "radius": radius(l), "wouldHaveBlocked": wb(l["would_have_blocked"]), "evidence": l["evidence"], "rollback": l["rollback"],
+              "detail": line_detail(l), "recommendation": l["recommendation"], "action": l["action"], "admittingRules": l.get("admitting_rules") or []}
+             for i, l in enumerate(sorted(p["lines"], key=lambda l: -l["score"]), 1)]
+    b = p["baseline"]
+    runbooks = []
+    for app, env in p["crown_jewels"]:
+        n = p["crown_jewel_workloads"].get(f"{app} ({env})", 0)
+        runbooks.append({"name": f"EMERGENCY-ISOLATE-{app}-{env}", "workloads": n, "found": n > 0,
+                         "steps": [f"get-labels key app value {app}; key env value {env}",
+                                   f"create-ruleset EMERGENCY-ISOLATE-{app}-{env}, scoped to app={app}, env={env}",
+                                   "create-deny-rule override deny: providers ams, consumers ams and Any, All Services, unscoped_consumers true",
+                                   "optional: outbound override deny in an unscoped ruleset (consumers the app's labels, providers ams and Any)",
+                                   "provision-policy"],
+                         "effect": "all traffic to the app stops, allow rules included.", "undo": "delete the override deny rules and provision again."})
+    watch = [{"cls": w["class"], "title": (f"public source {w['ip']}{' ' + w['fqdn'] if w.get('fqdn') else ''}" if w["class"] == "X3" else f"identity {w['identity']}"),
+              "detail": (f"reaches {w['peer_workloads']} workloads on {', '.join(w['ports']) or 'admin ports only'}; allowed into enforced {w['allowed_into_enforced']}; admitted by {', '.join(w['ip_lists']) or 'no named list'}" if w["class"] == "X3"
+                         else f"{'; '.join(w['why'])}; {w['observed_on_workloads']} workloads, {w['distinct_apps']} apps" + (f"; admin ports {', '.join(w['admin_ports'])}" if w["admin_ports"] else "")),
+              "recommendation": w["recommendation"]} for w in p["watch"]]
+    series = []
+    for s in (p.get("_timeline_series") or []):
+        bp = s.get("by_policy_decision") or {}
+        series.append({"bucketStart": s.get("bucket_start"), "flows": s.get("flows", 0), "pb": bp.get("potentially_blocked", 0), "blocked": bp.get("blocked", 0)})
+    denies = [l for l in p["buckets"]["today"] + p["buckets"]["week"] if l["kind"] != "ringfence"]
+    kpis = {"exposures": len(p["lines"]), "blockToday": len(p["buckets"]["today"]), "thisWeek": len(p["buckets"]["week"]), "runbooks": len(p["crown_jewels"]),
+            "watch": len(p["watch"]), "maxScore": max([l["score"] for l in p["lines"]] or [0]),
+            "allowedWouldStop": sum(l["would_have_blocked"].get("allowed", 0) for l in denies),
+            "pbWouldStop": sum(l["would_have_blocked"].get("potentially_blocked", 0) for l in denies),
+            "unknownAdminSources": sum(1 for l in p["lines"] if l["class"] == "X1"), "envCrossings": sum(1 for l in p["lines"] if l["class"] == "X2"),
+            "bridges": sum(1 for l in p["lines"] if "X4" in l["class"])}
+    scope = {"date": p["date"], "windowStart": str(p["window"].get("start") or "?")[:10], "windowEnd": str(p["window"].get("end") or "?")[:10], "windowDays": p["window_days"],
+             "productionEnvs": p["production_envs"], "crownJewels": [f"{a} ({e})" for a, e in p["crown_jewels"]], "crownJewelsSource": p["crown_jewels_source"],
+             "rulesetName": p["ruleset_name"], "lowerBounds": [k for k, v in p["truncated"].items() if v], "missingInputs": [k for k, v in p["inputs"].items() if not v],
+             "policyVersion": p["policy"].get("policy_version")}
+    baseline = {"available": bool(b.get("available")), "bucket": b.get("effective_bucket") or b.get("bucket") or "1d", "days": b.get("days", 0), "median": b.get("median_nonzero", 0),
+                "total": b.get("total_flows", 0), "worst": ({"bucketStart": b["worst"]["bucket_start"], "flows": b["worst"]["flows"], "multiple": b["worst"]["multiple"]} if b.get("worst") else None),
+                "caveat": b.get("caveat"), "truncated": bool(b.get("truncated")), "threshold": b.get("threshold"), "spikeBuckets": [{"bucketStart": x["bucket_start"]} for x in (b.get("spike_buckets") or [])] if not b.get("caveat") else [],
+                "series": series}
+    plans = [{"for": c["for"], "tool": c.get("tool"), "runbook": c.get("runbook"), "json": json.dumps(c, indent=1)} for c in p["call_plans"]]
+    j = lambda v: json.dumps(v, indent=None, default=str)
+    return "\n".join([f"const scope = {j(scope)};", f"const kpis = {j(kpis)};", f"const lines = {j(lines)};", f"const runbooks = {j(runbooks)};",
+                       f"const watch = {j(watch)};", f"const baseline = {j(baseline)};", f"const callPlans = {j(plans)};"])
+
+
+def write_dashboard(path: pathlib.Path, p: dict, template: pathlib.Path) -> str:
+    if not template.exists():
+        return f" (no dashboard: template {template} not found)"
+    t = template.read_text()
+    start, end = "\n// ==== DATA ====\n", "\n// ==== END DATA ===="
+    i, k = t.find(start), t.find(end)
+    if i < 0 or k < 0:
+        return " (no dashboard: template has no DATA markers on their own lines)"
+    out = t[:i + len(start)] + dashboard_data(p) + t[k:]
+    out = out.replace("// this file doubles as the template and as a worked example.", f"// generated by scripts/triage.py on {p['date']} from plan.json.")
+    path.write_text(out)
+    return ", dashboard.jsx"
+
+
 # ------------------------------------------------------------------------ main
 
 def parse_pair(text: str) -> tuple:
@@ -606,6 +822,7 @@ def main(argv=None) -> int:
     ap.add_argument("--crown", action="append", default=[], help="crown-jewel app as app=<name>,env=<env> (repeatable)")
     ap.add_argument("--window-days", type=int, default=30)
     ap.add_argument("--date", default=date.today().isoformat(), help="YYYY-MM-DD used in the draft ruleset name")
+    ap.add_argument("--template", type=pathlib.Path, default=None, help="dashboard template (default: ../references/dashboard-example.jsx)")
     a = ap.parse_args(argv)
 
     names = ("workloads", "summary", "admin_ports", "lateral", "unknown", "identities", "rulesets", "timeline")
@@ -650,14 +867,27 @@ def main(argv=None) -> int:
                    "fenced": sorted(f"{a} ({e})" for a, e in policy["fenced"])},
         "lines": lines, "buckets": {"today": today, "week": week}, "watch": x3 + x6,
         "baseline": baseline(data["timeline"]),
+        "_timeline_series": (data["timeline"] or {}).get("series") or [],
     }
+    for l in lines:
+        l["bucket"] = "today" if l in today else "week"
+        l["ruleset"] = plan["ruleset_name"]
+        l["recommendation"] = recommendation(l)
+        l["action"] = action(l)
+        l["why"] = l.get("why") if isinstance(l.get("why"), dict) else l.get("why")
+    for w in plan["watch"]:
+        w["recommendation"] = watch_recommendation(w)
+        w["action"] = watch_action(w)
     plan["call_plans"] = call_plans(plan)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "plan.json").write_text(json.dumps(plan, indent=1, default=str))
     write_plan_md(a.out / "plan.md", plan)
     write_call_plans(a.out / "call-plans.md", plan)
+    write_report_md(a.out / "report.md", plan)
+    template = a.template or pathlib.Path(__file__).resolve().parent.parent / "references" / "dashboard-example.jsx"
+    dash_note = write_dashboard(a.out / "dashboard.jsx", plan, template)
     missing = [n for n, ok in plan["inputs"].items() if not ok]
-    print(f"wrote {a.out / 'plan.json'}, plan.md, call-plans.md: {len(today)} today, {len(week)} this week, "
+    print(f"wrote {a.out / 'plan.json'}, plan.md, call-plans.md, report.md{dash_note}: {len(today)} today, {len(week)} this week, "
           f"{len(jewels)} runbooks, {len(plan['watch'])} watch" + (f"; missing inputs: {', '.join(missing)}" if missing else ""))
     return 0
 
