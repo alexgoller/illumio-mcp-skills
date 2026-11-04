@@ -30,15 +30,16 @@ whether any reached an enforced workload (`allowed_into_enforced`), and
 that the rule is an **override deny** on purpose. For X2 name the
 environment pair, the admin ports seen, and the app pairs behind it.
 
-## 2. Fence this week
+## 2. This week: fence, or deny after review
 
 Same line shape. For a ringfence say: the app, why (bridge with
 `reachable_apps` N, or visibility-mode with blocked inbound), the inbound
 remote apps the allow list will carry and how many of them are already
 allowed, and that unlabelled or IP-list sources get no allow rule and
 will hit the deny. For a deny that landed here because an allow rule
-admits most of the traffic, say which share is allowed and that the
-allow list needs review first.
+admits most of the traffic, say how many allowed connections would stop
+and which rules or IP list admit them today; the user confirms before
+provisioning.
 
 ## 3. Isolate on demand
 
@@ -69,9 +70,9 @@ for review"` as its first key:
 1. `create-iplist` for the X1 sources
 2. `create-ruleset` `RRR-<date>` (unscoped, `scopes: []`)
 3. `create-deny-rule` per X1 and X2 line, `ruleset_name: "RRR-<date>"`
-4. `create-ringfence` per X4 and X5 line, `dry_run: true` first, then the
-   same call with `dry_run: false`, `selective: true`, `deny_consumer:
-   "any"`
+4. `create-ringfence` per X4 and X5 line: the `dry_run: true` block is
+   the user's preview call (never this skill's), then the same call with
+   `dry_run: false`, `selective: true`, `deny_consumer: "any"`
 5. the isolation runbooks, each a numbered list of calls ending in
    `provision-policy`, with the undo
 
@@ -82,5 +83,7 @@ show their traffic as `blocked`."
 ## Colour
 
 The plan is text. If it is rendered as a document with status colours
-(a .docx), every table that uses colour ends with a legend naming each
+(a .docx through the docx skill), the only mapping is: red = Block today,
+amber = This week, grey = Watch and Isolate on demand; nothing else is
+coloured. Every table that uses colour ends with a legend naming each
 colour where it is used, and decorative colour is one neutral grey.

@@ -184,7 +184,7 @@ def x1_unknown_admin(unknown: dict | None, policy: dict) -> list[dict]:
         ev = (e.get("profile_evidence") or {}).get("admin_reach") or {}
         m = mix(counts)
         b = scale(src.get("peer_workloads", e.get("peer_workloads", 0)), (2, 5, 10, 25))
-        ease = clamp(ease_base(m) + (1 if e.get("ip_lists") else 0))
+        ease = clamp(ease_base(m))
         lines.append({
             "class": "X1", "kind": "override_deny", "score": b * ease, "blast_radius": b, "ease": ease,
             "title": f"unknown source {e['ip']}{' (' + e['fqdn'] + ')' if e.get('fqdn') else ''} on "
@@ -225,7 +225,7 @@ def x3_public_sources(unknown: dict | None, x1_ips: set) -> list[dict]:
     return sorted(lines, key=lambda l: (-l["allowed_into_enforced"], -l["peer_workloads"]))
 
 
-def x2_env_crossings(admin: dict | None, hosts: dict, prod: list[str]) -> list[dict]:
+def x2_env_crossings(admin: dict | None, hosts: dict, prod: list[str], rs: dict | None = None) -> list[dict]:
     if not admin:
         return []
     groups: dict[tuple, dict] = {}
@@ -259,11 +259,30 @@ def x2_env_crossings(admin: dict | None, hosts: dict, prod: list[str]) -> list[d
             "ports_seen": [f"{p} ({n})" for p, n in seen_ports.most_common(8)] or ["ports not itemised for allowed rows; the rule covers the admin set"],
             "app_pairs": [{"from": f, "to": t, "policy": p, "connections": n}
                           for (f, t, p), n in sorted(g["pairs"].items(), key=lambda kv: -kv[1])[:10]],
-            "would_have_blocked": m,
+            "would_have_blocked": m, "admitting_rules": admitting_rules(rs, src_env, dst_env) if m["allowed"] else [],
             "evidence": [f"admin-port summary app_to_app rows env={src_env} -> env={dst_env} ({len(g['pairs'])} rows)"],
             "rollback": "delete the deny rule from the draft ruleset",
         })
     return sorted(lines, key=lambda l: (-l["to_production"], -l["score"]))
+
+
+def admitting_rules(rs: dict | None, src_env: str, dst_env: str) -> list[str]:
+    """Allow rules that could admit env=src_env -> env=dst_env: consumer names that env,
+    all workloads or an IP list, and the ruleset is scoped to dst_env or the provider names it."""
+    out = []
+    for r in (rs or {}).get("rulesets", []):
+        scoped_dst = any(any(isinstance(x, dict) and x.get("key") == "env" and x.get("value") == dst_env for x in scope)
+                         for scope in (r.get("scopes") or []))
+        for rule in r.get("rules", []):
+            if rule.get("rule_type") != "allow":
+                continue
+            cons = [actor_text(a) for a in rule.get("consumers", [])]
+            provs = [actor_text(a) for a in rule.get("providers", [])]
+            c_ok = any(c in (f"env={src_env}", "all workloads") or c.startswith("iplist:") for c in cons)
+            p_ok = scoped_dst or any(pv in (f"env={dst_env}", "all workloads") for pv in provs)
+            if c_ok and p_ok:
+                out.append(f"{r.get('name')}: {', '.join(cons)} -> {', '.join(provs)} on {', '.join(service_text(x) for x in rule.get('ingress_services', []))}")
+    return out[:5]
 
 
 def inbound_remotes(summary: dict | None, app: tuple) -> dict:
@@ -309,11 +328,13 @@ def ringfence_lines(lateral: dict | None, wl: dict, summary: dict | None, policy
         rem = inbound_remotes(summary, key)
         b = max(scale(why.get("bridge", {}).get("reachable_apps", 0), (2, 3, 6, 11)) if "bridge" in why else 1,
                 scale(app["workloads"], (2, 5, 10, 25)) if "visibility" in why else 1)
-        ease = clamp(ease_base(rem["inbound_mix"]) + (1 if key in policy["scoped"] else 0) - 1)
+        nr = rem["no_rule_possible"]
+        base = ease_base(mix(nr["policy"])) if nr["connections"] else 4
+        ease = clamp(base + (1 if key in policy["scoped"] else 0) - 1)
         classes = [c for c, k in (("X4", "bridge"), ("X5", "visibility")) if k in why]
         lines.append({
             "class": "+".join(classes), "kind": "ringfence", "score": b * ease, "blast_radius": b, "ease": ease,
-            "title": f"selective ringfence {key[0]} ({key[1]})", "app": key[0], "env": key[1],
+            "title": f"selective ringfence {key[0]} ({key[1]}), deny_consumer any", "app": key[0], "env": key[1],
             "why": why, "workloads": app["workloads"], "enforcement": dict(app["modes"]),
             "already_fenced": key in policy["fenced"], "scoped_rulesets": policy["scoped"].get(key, []),
             "allow_list": rem, "would_have_blocked": rem["no_rule_possible"]["policy"] | {"denied_share": None},
@@ -354,8 +375,9 @@ def x6_identities(ident: dict | None) -> list[dict]:
 def crown_jewels(given: list[tuple], ringfences: list[dict], prod: list[str]) -> tuple[list[tuple], str]:
     if given:
         return given, "given by the user"
-    bridges = [(l["app"], l["env"]) for l in ringfences if "bridge" in l["why"] and l["env"] in prod]
-    return bridges[:3], "defaulted to the top production bridge apps"
+    bridges = sorted((l for l in ringfences if "bridge" in l["why"] and l["env"] in prod),
+                     key=lambda l: -l["why"]["bridge"]["reachable_apps"])
+    return [(l["app"], l["env"]) for l in bridges[:3]], "defaulted to the three production bridge apps with the largest reach"
 
 
 # ------------------------------------------------------------------- baseline
@@ -381,10 +403,6 @@ def call_plans(p: dict) -> list[dict]:
     plans = []
     x1_groups = [("today", [l for l in p["buckets"]["today"] if l["class"] == "X1"], ""),
                  ("week", [l for l in p["buckets"]["week"] if l["class"] == "X1"], "-review")]
-    if any(l["class"] in ("X1", "X2") for l in p["lines"]):
-        plans.append({"for": "ruleset", "tool": "create-ruleset", "DO_NOT_CALL": "draft for review", "name": rs,
-                      "description": f"Rapid risk reduction drafts {p['date']}; unscoped (scopes: [] = all workloads)",
-                      "scopes": []})
     for bucket, x1, suffix in x1_groups:
         if not x1:
             continue
@@ -393,29 +411,42 @@ def call_plans(p: dict) -> list[dict]:
                       "description": "Unknown (non-workload) sources seen on admin ports; rapid risk reduction"
                                      + ("; these admit allowed traffic, review before the deny" if suffix else ""),
                       "ip_ranges": [{"from_ip": l["ip"], "description": l.get("fqdn") or "unknown source"} for l in x1]})
+    if any(l["class"] in ("X1", "X2") for l in p["lines"]):
+        if p["policy"]["rrr_rulesets"]:
+            plans.append({"for": "ruleset", "tool": None, "DO_NOT_CALL": "nothing to call",
+                          "_notes": f"draft ruleset {rs} already exists; the deny rules below target it"})
+        else:
+            plans.append({"for": "ruleset", "tool": "create-ruleset", "DO_NOT_CALL": "draft for review", "name": rs,
+                          "description": f"Rapid risk reduction drafts {p['date']}; unscoped (scopes: [] = all workloads)",
+                          "scopes": []})
+    for bucket, x1, suffix in x1_groups:
+        if not x1:
+            continue
+        list_name = f"RRR-unknown-admin-sources-{p['date']}{suffix}"
         ports = sorted({ap for l in x1 for ap in l["admin_ports"]})
         plans.append({"for": f"X1 ({bucket})", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review", "ruleset_name": rs,
                       "consumers": [f"iplist:{list_name}"], "providers": ["ams"],
                       "ingress_services": [{"port": int(ap.split('/')[0]), "proto": ap.split('/')[1]} for ap in ports],
                       "override_deny": True, "unscoped_consumers": True,
-                      "why_override": "incident-grade block: must hold even where an allow rule admits the source",
-                      "would_have_blocked": {d: sum(l["would_have_blocked"][d] for l in x1) for d in DECISIONS}})
+                      "_notes": {"why_override": "incident-grade block: must hold even where an allow rule admits the source",
+                                 "would_have_blocked": {d: sum(l["would_have_blocked"][d] for l in x1) for d in DECISIONS}}})
     for l in p["lines"]:
         if l["class"] == "X2":
             plans.append({"for": f"X2 {l['src_env']}->{l['dst_env']}", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review",
                           "ruleset_name": rs, "consumers": [f"env={l['src_env']}"], "providers": [f"env={l['dst_env']}"],
                           "ingress_services": [{"port": port, "proto": proto} for port, proto in ADMIN_PORTS],
                           "override_deny": False, "unscoped_consumers": True,
-                          "note": f"enforced on managed workloads carrying env={l['src_env']} in selective or full enforcement"})
+                          "_notes": {"enforced_on": f"managed workloads carrying env={l['src_env']} in selective or full enforcement",
+                                     "would_have_blocked": l["would_have_blocked"], "admitting_rules": l.get("admitting_rules", [])}})
     for l in p["lines"]:
         if l["kind"] == "ringfence":
             base = {"app_name": l["app"], "env_name": l["env"], "lookback_days": p["window_days"]}
-            plans.append({"for": f"{l['class']} {l['app']} ({l['env']})", "tool": "create-ringfence", "DO_NOT_CALL": "preview first",
-                          **base, "dry_run": True})
+            plans.append({"for": f"{l['class']} {l['app']} ({l['env']})", "tool": "create-ringfence",
+                          "DO_NOT_CALL": "the user's preview call, never this skill's", **base, "dry_run": True})
             plans.append({"for": f"{l['class']} {l['app']} ({l['env']})", "tool": "create-ringfence", "DO_NOT_CALL": "draft for review",
                           **base, "dry_run": False, "selective": True, "deny_consumer": "any",
                           "ruleset_name": f"RF-{l['app']}-{l['env']}",
-                          "note": "allow rules for every observed inbound remote app with app and env labels; unlabelled and IP-list sources get no allow and hit the deny"})
+                          "_notes": "allow rules for every observed inbound remote app with app and env labels; unlabelled and IP-list sources get no allow and hit the deny"})
     for app, env in p["crown_jewels"]:
         name = f"EMERGENCY-ISOLATE-{app}-{env}"
         plans.append({"for": f"CJ {app} ({env})", "runbook": name, "DO_NOT_CALL": "run only on a confirmed incident", "steps": [
@@ -444,10 +475,10 @@ def wb_text(m: dict) -> str:
 def line_text(l: dict) -> str:
     radius = {"X1": f"{l.get('peer_workloads', 0)} workloads, {l.get('peers_enforced', 0)} enforced",
               "X2": f"{len(l.get('dst_apps', []))} destination apps"}.get(l["class"], None)
-    wb = f"would have blocked {wb_text(l['would_have_blocked'])}"
+    wb = f"would have blocked {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked)"
     if l["kind"] == "ringfence":
-        radius = f"{l['workloads']} workloads" + (f", reaches {l['why']['bridge']['reachable_apps']} apps" if "bridge" in l["why"] else "")
-        wb = f"deny would catch {wb_text(l['would_have_blocked'])} from sources with no allow rule"
+        radius = (f"reaches {l['why']['bridge']['reachable_apps']} apps, " if "bridge" in l["why"] else "") + f"{l['workloads']} workloads"
+        wb = f"deny would catch {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked) from sources with no allow rule"
     return (f"**{l['score']}** | {l['class']} {l['title']} | blast radius {l['blast_radius']} ({radius}) | "
             f"{wb} | evidence: {'; '.join(l['evidence'])} | rollback: {l['rollback']}")
 
@@ -461,10 +492,11 @@ def details(l: dict) -> list[str]:
         return [f"  - override deny on purpose; source {l['ip']}{' ' + l['fqdn'] if l.get('fqdn') else ''} is {l['address_class']}, "
                 f"lists: {', '.join(l['ip_lists']) or 'none'}, profile: {', '.join(l.get('profile') or [])}; allowed into enforced workloads: {l['allowed_into_enforced']}; "
                 f"peer apps: {', '.join(l['peer_apps'][:6])}"
-                + (f"; {l['would_have_blocked']['allowed']} allowed connections would break: review the admitting rule first" if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")]
+                + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm admin access from this source may end" if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")]
     if l["class"] == "X2":
         return [f"  - ports seen: {', '.join(l['ports_seen'])}; app pairs: " + "; ".join(f"{a['from']} -> {a['to']} {a['policy']} {a['connections']}" for a in l["app_pairs"][:5])
-                + (f"; {l['would_have_blocked']['allowed']} allowed connections would break: review the admitting allow rules before provisioning" if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")]
+                + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm they may, admitted by: "
+                   + ("; ".join(l.get("admitting_rules") or []) or "no allow rule found naming these envs (a broader rule or an IP list)") if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")]
     al = l["allow_list"]
     why = " and ".join(filter(None, [f"bridge reaching {l['why']['bridge']['reachable_apps']} apps" if "bridge" in l["why"] else "",
                                     f"{l['why']['visibility']['workloads_not_enforcing']} workloads not enforcing with {l['why']['visibility']['denied_inbound_connections']} denied inbound connections" if "visibility" in l["why"] else ""]))
@@ -492,7 +524,7 @@ def write_plan_md(path: pathlib.Path, p: dict) -> None:
         L += details(l)
     if not b["today"]:
         L.append("- nothing qualifies: no deny with ease 4 or more")
-    L.append("\n## 2. Fence this week")
+    L.append("\n## 2. This week: fence, or deny after review")
     for l in b["week"]:
         L.append(f"- {line_text(l)}")
         L += details(l)
@@ -500,12 +532,13 @@ def write_plan_md(path: pathlib.Path, p: dict) -> None:
         L.append("- nothing")
     L.append("\n## 3. Isolate on demand")
     for app, env in p["crown_jewels"]:
-        L.append(f"- EMERGENCY-ISOLATE-{app}-{env}: run only on a confirmed incident. get-labels -> create-ruleset scoped to the app -> "
+        n = p["crown_jewel_workloads"].get(f"{app} ({env})", 0)
+        L.append(f"- EMERGENCY-ISOLATE-{app}-{env} ({n} workloads in inventory{'; not found, check the label values' if not n else ''}): run only on a confirmed incident. get-labels -> create-ruleset scoped to the app -> "
                  f"create-deny-rule override_deny true, providers ams, consumers ams + Any, All Services, unscoped_consumers true -> "
                  f"(optional outbound rule in an unscoped ruleset) -> provision-policy. Effect: all traffic to the app stops, allows included. "
                  f"Undo: delete the override deny rules and provision again.")
     if not p["crown_jewels"]:
-        L.append("- none: no crown jewels given and no production bridge apps found")
+        L.append("- none found: no crown jewels given and no production bridge app; name one as app (env) and re-run")
     L.append("\n## 4. Watch")
     for l in p["watch"]:
         if l["class"] == "X3":
@@ -531,7 +564,8 @@ def write_plan_md(path: pathlib.Path, p: dict) -> None:
     else:
         L.append("No timeline saved; run get-traffic-timeline for the baseline.")
     rise = sum(l["would_have_blocked"].get("allowed", 0) + l["would_have_blocked"].get("potentially_blocked", 0) for l in b["today"] + b["week"] if l["kind"] != "ringfence")
-    L.append(f"Re-run the timeline 7 days after provisioning; if every deny line is provisioned, blocked should rise by about {rise} connections per window, and nothing else should move.")
+    L.append(f"Re-run the timeline 7 days after provisioning: blocked rows should rise and potentially blocked fall, and nothing else should move. "
+             f"The deny lines account for {rise} connections per window (the timeline counts flows, so compare direction, not magnitude).")
     L.append("\nCall plans: see call-plans.md (every block is DO_NOT_CALL).")
     path.write_text("\n".join(L) + "\n")
 
@@ -539,6 +573,7 @@ def write_plan_md(path: pathlib.Path, p: dict) -> None:
 def write_call_plans(path: pathlib.Path, p: dict) -> None:
     L = [f"# Call plans for {p['ruleset_name']} (DO_NOT_CALL: drafts for review)\n",
          "Apply order: IP list, ruleset, deny rules, ringfence previews then ringfences, runbooks held in reserve. "
+         "In every block, `for`, `tool`, `DO_NOT_CALL` and `_notes` are not parameters; everything else is the tool's input. "
          "Deny rules with a label consumer are enforced on the source workloads; with an IP-list consumer at the destination. "
          "A deny bites only in selective or full enforcement. Override deny beats every allow rule and is used only for X1 and the runbooks.\n"]
     for c in p["call_plans"]:
@@ -573,11 +608,14 @@ def main(argv=None) -> int:
     if data["workloads"] is None:
         sys.exit(f"{files['workloads']} is required (get-workloads, compact, unfiltered)")
 
+    cols = (data["workloads"] or {}).get("columns") or []
+    if cols and not {"app", "env"} <= set(cols):
+        sys.exit("workloads.json has no app/env label columns; X2, X4, X5 and the ringfence allow lists need app and env labels")
     wl = workload_index(split_rows(data["workloads"]))
     prod = pick_prod_envs(a.prod_env, wl["envs"])
     policy = existing_policy(data["rulesets"])
     x1 = x1_unknown_admin(data["unknown"], policy)
-    x2 = x2_env_crossings(data["summary_admin"], wl["hosts"], prod)
+    x2 = x2_env_crossings(data["summary_admin"], wl["hosts"], prod, data["rulesets"])
     fences = ringfence_lines(data["lateral"], wl, data["summary"], policy)
     x3 = x3_public_sources(data["unknown"], {l["ip"] for l in x1})
     x6 = x6_identities(data["identities"])
@@ -586,7 +624,9 @@ def main(argv=None) -> int:
     lines = sorted(x1 + x2 + fences, key=lambda l: -l["score"])
     today = [l for l in lines if l["kind"] in ("deny", "override_deny") and l["ease"] >= 4]
     week = [l for l in lines if l not in today]
+    wl_env = data["workloads"] or {}
     truncated = {
+        "workloads": bool(wl_env.get("truncated")) or wl_env.get("total", 0) >= 10000,
         "summary": bool(((data["summary"] or {}).get("totals") or {}).get("truncated")),
         "summary_admin": bool(((data["summary_admin"] or {}).get("totals") or {}).get("truncated")),
         "unknown": bool(((data["unknown"] or {}).get("totals") or {}).get("flows_truncated")),
@@ -597,6 +637,7 @@ def main(argv=None) -> int:
         "window": (data["summary"] or data["unknown"] or data["timeline"] or {}).get("window") or {},
         "inputs": {n: f.exists() for n, f in files.items()}, "truncated": truncated,
         "production_envs": prod, "crown_jewels": jewels, "crown_jewels_source": jewels_src,
+        "crown_jewel_workloads": {f"{a} ({e})": wl["apps"].get((a, e), {}).get("workloads", 0) for a, e in jewels},
         "policy": {"policy_version": policy["policy_version"], "rrr_rulesets": policy["rrr_rulesets"],
                    "deny_rules": policy["deny_rules"],
                    "scoped": {f"{a} ({e})": v for (a, e), v in policy["scoped"].items()},

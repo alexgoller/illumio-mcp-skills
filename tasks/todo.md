@@ -165,15 +165,26 @@ Rendered at 1280px: Overview (banner, 8 KPIs, severity bar, top issues), Unknown
 Spec: skills issue #10. Server is 0.13.1 (released 2026-10-31); `emergency-isolate-application`
 is an MCP prompt, not a tool, so the runbook spells out its tool calls.
 
-- [ ] Ground truth: tool schemas dumped from the 0.13.1 registry; output shapes of summary,
+- [x] Ground truth: tool schemas dumped from the 0.13.1 registry; output shapes of summary,
       timeline, lateral-movement, infra, unknown-endpoints, identity graph, workloads, rulesets,
       ringfence dry run (shapes.md in scratchpad)
-- [ ] `references/scoring.md`: triage classes X1-X6, blast radius x ease, buckets today/week/on-demand
-- [ ] `references/report-template.md`: one-page plan skeleton, call-plan blocks marked DO_NOT_CALL
-- [ ] `scripts/triage.py`: merges saved results, scores, writes plan.json, plan.md, call-plans.md;
+- [x] `references/scoring.md`: triage classes X1-X6, blast radius x ease, buckets today/week/on-demand
+- [x] `references/report-template.md`: one-page plan skeleton, call-plan blocks marked DO_NOT_CALL
+- [x] `scripts/triage.py`: merges saved results, scores, writes plan.json, plan.md, call-plans.md;
       never talks to the PCE; tolerant of missing files
-- [ ] Synthetic fixture in the scratchpad exercising every class; run the script; read the output
-- [ ] `SKILL.md`: one question, PCE budget, steps 0-7, verification, older servers
-- [ ] README entry, package.sh produces the zip, layout check
-- [ ] Cold-read test by a fresh agent (10 scenarios), fix clarity gaps
-- [ ] PR, CI green, link from issue #10
+- [x] Synthetic fixture in the scratchpad exercising every class; run the script; read the output
+- [x] `SKILL.md`: one question, PCE budget, steps 0-7, verification, older servers
+- [x] README entry, package.sh produces the zip, layout check
+- [x] Cold-read test by a fresh agent (10 scenarios), fix clarity gaps
+- [x] PR, CI green, link from issue #10
+
+## Review
+
+Built from the 0.13.1 registry (schemas dumped from a worktree of origin/main) and an
+Explore agent's field-level map of nine tool outputs. `emergency-isolate-application` turned
+out to be an MCP prompt, not a tool, so the runbook spells out its calls. Script verified on a
+synthetic fixture covering every class (2 today, 6 this week, 2 runbooks, 3 watch) and on a
+workloads-only fixture (empty plan, missing inputs named). Cold-read by a fresh agent found 15
+gaps, 3 of them contradictions (stop vs continue on an old server, narrow vs annotate on a
+capped query, a ringfence ease the sample did not reproduce); all fixed in script and docs.
+Not run against a live PCE.

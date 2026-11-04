@@ -13,10 +13,10 @@ so a change on either side is noticed.
 | X1 | Unknown source reaching workloads on admin ports | `find-unknown-endpoints` (inbound) | `admin_reach` in `profile` | **override deny**: IP list of the sources -> all workloads on the admin ports seen |
 | X2 | Admin ports crossing an environment boundary | admin-port traffic summary, `app_to_app` | `from` and `to` parse to `app (env)` with different `env` | **deny**: `env=<from>` -> `env=<to>` on the admin ports; one rule per environment pair |
 | X3 | Internet-exposed listener | `find-unknown-endpoints` (inbound) | `address_class` public with an `as_source` block | **review** the admitting rule (the lists in `ip_lists`, or the default list); a draft rule only through X1 |
-| X4 | Lateral-movement bridge app | `detect-lateral-movement-paths` | listed in `high_risk_bridge_nodes` | **selective ringfence** of the app, `deny_consumer: any` |
+| X4 | Lateral-movement bridge app | `detect-lateral-movement-paths` | listed in `high_risk_bridge_nodes` (`reachable_apps` is observed outbound reach, blocked traffic included) | **selective ringfence** of the app, `deny_consumer: any`: fencing inbound stops the bridge being used as a hop, because an attacker has to get into it first |
 | X5 | App in visibility mode that policy already wants to block | workloads + estate summary | any workload of the app in `visibility_only` or `idle`, and an `app_to_app` row into the app with `potentially_blocked` or `blocked` | **selective ringfence** of the app, then move its workloads to selective |
 | X6 | Interactive identity with wide reach | `build-identity-graph` | `class` interactive and `interest` review in `findings` | **watch**: no Illumio rule names an identity; the admin-port denies of X1 and X2 are the control |
-| CJ | Crown-jewel app | the user's list, else the top three production bridges from X4 | always | **isolation runbook**: the `emergency-isolate-application` prompt's steps spelled out as calls, held in reserve |
+| CJ | Crown-jewel app | the user's list, else the three production bridges from X4 with the largest `reachable_apps`; with neither, the section says so and asks for a name | always | **isolation runbook**: the `emergency-isolate-application` prompt's steps spelled out as calls, held in reserve |
 
 An app can appear in X4 and X5; it gets one ringfence line carrying both
 reasons. X1 and X3 can name the same address; it gets one override-deny
@@ -52,14 +52,30 @@ connections the fix would touch (from the same rows):
 | 30% to 70% | 3 |
 | under 30% (an allow rule admits most of it; something may depend on it) | 2 |
 
+Which connections "the fix would touch":
+
+- X1: the source's admin-port rows (`as_source.ports` with `admin`
+  true).
+- X2: every `app_to_app` row of the environment pair in the admin-port
+  summary.
+- X4, X5: the inbound rows into the app whose source gets **no allow
+  rule** (`unlabelled` or `external:` sources; a labelled remote app
+  gets an allow and is not touched). When that set is empty the base is
+  4, not 5: the risk is sources outside the window, not observed ones.
+
 Then:
 
 - **+1** when a label scope exists for the fix: a ruleset scoped to the
   app (X4, X5), or the `env` labels on both sides (X2, always). X1 gets
-  +1 only when the sources are already in a named IP list.
+  no scope bonus: a source already in a named IP list was admitted on
+  purpose, which makes the deny riskier, not easier.
 - **-1** when the fix is a ringfence (X4, X5): its allow list is built
   from observed traffic and needs a review before provisioning.
 - Clamp to 1 to 5.
+
+Ease measures how little observed traffic the draft changes, not whether
+the change is wanted; a line with `allowed` connections says what would
+stop and who admits it today, and the user decides.
 
 Decision mix reads `potentially_blocked` as "no allow rule covers this
 today". The traffic still flows while the workload is in visibility or
@@ -75,7 +91,7 @@ override deny bites, and it will break whatever used the rule.
 | Bucket | Rule |
 | --- | --- |
 | **Block today** | fix type deny or override deny, E >= 4 |
-| **Fence this week** | every other line with a draft fix: denies with E < 4 (they need an allow-list review first), ringfences |
+| **This week: fence, or deny after review** | every other line with a draft fix: ringfences, and denies with E < 4 (an allow rule admits most of their traffic; the line names the admitting rules from `rulesets.json`, or the IP list for X1, and the user confirms that traffic may stop) |
 | **Isolate on demand** | the CJ runbooks; nothing is drafted for these |
 | **Watch** | X3 lines that are not also X1, and X6 lines; no draft fix |
 
