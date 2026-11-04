@@ -176,7 +176,8 @@ is an MCP prompt, not a tool, so the runbook spells out its tool calls.
 - [x] `SKILL.md`: one question, PCE budget, steps 0-7, verification, older servers
 - [x] README entry, package.sh produces the zip, layout check
 - [x] Cold-read test by a fresh agent (10 scenarios), fix clarity gaps
-- [x] PR, CI green, link from issue #10
+- [x] PR #12, CI green, closes #10
+- [x] Fold PR #11's grouped admin-port query into #12 (ports per crossing), close #11 on the owner's instruction
 
 ## Review
 
