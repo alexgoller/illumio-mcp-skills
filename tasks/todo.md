@@ -206,7 +206,7 @@ report too, where we would see the risk and the tool recommends what to do".
 - [x] Verified: both fixtures render all 7 tabs with 0 errors and a legend per section;
       screenshots of Overview, Block today and Baseline inspected; example DATA block equals a
       fresh run
-- [ ] PR, CI green
+- [x] PR #15, CI green
 
 ## Review
 
