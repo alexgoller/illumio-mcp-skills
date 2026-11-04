@@ -32,3 +32,12 @@
   the union script in the scratchpad (merge_unreleased.py) resolved it, but
   a repo convention (one Unreleased section, bullets appended) would avoid
   the conflict altogether.
+
+## 2026-11-04 illumio-rapid-risk-reduction
+- When a rule lives in both a document and a script (capped queries, ease), the
+  cold-read catches the two drifting apart within an hour of writing. State the
+  rule once in the reference and have the script's output quote it (the legend
+  on `would have blocked a/b/c`), rather than paraphrasing it in three places.
+- "Requires server X" needs the tool list behind it. The server's prompts
+  (`emergency-isolate-application`) look like tools in its own docs; dump the
+  registry before promising a call.
