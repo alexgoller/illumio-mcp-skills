@@ -41,3 +41,8 @@
 - "Requires server X" needs the tool list behind it. The server's prompts
   (`emergency-isolate-application`) look like tools in its own docs; dump the
   registry before promising a call.
+
+## 2026-11-04 bytecode in the merge
+- `git add -A` after running `py_compile` committed a `__pycache__` file into PR #12;
+  package.sh pruned it from the zips, the repo still carried it. Add generated
+  directories to .gitignore before the first `git add -A`, and read the merge diff.
