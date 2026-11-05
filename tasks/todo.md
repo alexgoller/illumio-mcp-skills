@@ -344,3 +344,17 @@ Risk map at 1280 and 400 px and the This week tab inspected. The example's DATA 
 equals a fresh fixture draft-view run; description 1017 chars; package.sh builds. Server
 issue #76 filed (find-unknown-endpoints resolves ip_lists against the draft). Not run
 against a live PCE.
+
+## 2026-11-05 Install documentation (INSTALL.md, PR #18)
+
+- [x] Verify how Claude Code 2.1.318 loads a skill: zip via `--plugin-dir` (session, `<folder>:<skill>`), `--plugin-url` from a release asset (`url-0-<folder>:<skill>`), folder under `.claude/skills/` (folder name is the invocation name), folder of bare skills (not loaded), marketplace manifest at the repo root (all eight as `illumio:<name>`)
+- [x] Read the server's Claude Code and Claude Desktop install blocks
+- [x] Confirm docs facts (claude-code-guide agent): skill dirs and precedence, `--plugin-url`, marketplace manifest, `document-skills@anthropic-agent-skills`, `frontend-design@claude-plugins-official`, mcp scopes, Desktop Code tab reads `claude_desktop_config.json`
+- [x] Add `.claude-plugin/marketplace.json` (one plugin `illumio`, no version, `strict: false`), validated with `claude plugin validate .`, installed and uninstalled locally
+- [x] Write `INSTALL.md`: prerequisites and server-version table, Claude Code (server, routes A to D, check, document skills, dashboards), Claude Desktop (chat and Cowork, Code tab), claude.ai, troubleshooting
+- [x] README: install section points at INSTALL.md with the one-line plugin install; Releasing notes the manifest needs no version bump
+- [x] Verify: package.sh still builds eight zips; every Claude Code command in the doc was run once except `claude mcp add` (needs a server)
+- [x] PR #18 merged 2026-11-05 (after #17); `claude plugin install illumio --marketplace alexgoller/illumio-mcp-skills` run against GitHub from the repo directory: all eight skills listed as `illumio:<name>`, then removed again
+
+### Review
+One manifest file turns the repo into a marketplace, which replaced the README's old `--plugin-dir x.zip` advice (true, but session-only and namespaced `x:x`). "Unzip it into your skills directory" was also true but hid that the folder name becomes the invocation name, which bites for the two directories named differently from their skills. Desktop and claude.ai menu paths come from the help centre, not from a local test. A `&&` chain that failed at `git checkout` silently skipped the todo append in the first attempt; the plan is recorded here after the merge.
