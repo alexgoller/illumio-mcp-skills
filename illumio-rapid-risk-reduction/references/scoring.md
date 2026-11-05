@@ -80,9 +80,28 @@ stop and who admits it today, and the user decides.
 Decision mix reads `potentially_blocked` as "no allow rule covers this
 today". The traffic still flows while the workload is in visibility or
 selective mode, so a deny on it is a change in behaviour, just not a
-change in intent. `blocked` means nothing changes. `allowed` means an
-allow rule admits it and a deny below that rule does nothing; only an
+change in intent. `blocked` means nothing changes. `allowed` means the
+VEN let it through: in full enforcement or visibility that is because an
+allow rule matched, and a deny below that rule does nothing; only an
 override deny bites, and it will break whatever used the rule.
+
+**Selective enforcement reports everything a deny does not catch as
+`allowed`**, whether or not an allow rule exists (it enforces only deny
+rules, so there is no "potentially blocked" on it). An estate of
+selective workloads therefore shows no `potentially_blocked` at all and
+the denied share alone would score every deny as risky. The script
+reads the draft rules instead: when the **enforcing side** of a fix (the
+source workloads carrying the consumer env for an X2 deny; the
+destination workloads of the source's peer apps for an X1 IP-list deny)
+is wholly in selective enforcement and **no draft allow rule could admit
+the traffic** (`admitting_rules` empty, scope and `unscoped_consumers`
+honoured, named services counted as "could"), the allowed connections
+are `allowed_not_admitted` and count towards the deny-safe share with
+the denied decisions. They are shown as "allowed, no rule" (teal on the
+dashboard). Any mixed enforcement, or any rule that could admit the
+traffic, keeps them as plain `allowed`. A draft policy decision from the
+server would make this exact; until then it is an inference from the
+rulesets, stated as such.
 
 ## 4. Score and buckets
 
@@ -90,8 +109,8 @@ override deny bites, and it will break whatever used the rule.
 
 | Bucket | Rule |
 | --- | --- |
-| **Block today** | fix type deny or override deny, E >= 4 |
-| **This week: fence, or deny after review** | every other line with a draft fix: ringfences, and denies with E < 4 (an allow rule admits most of their traffic; the line names the admitting rules from `rulesets.json`, or the IP list for X1, and the user confirms that traffic may stop) |
+| **Block today** | fix type deny or override deny, E >= 4, and (for X1) a public source; an internal unknown source never lands here |
+| **This week: fence, or deny after review** | every other line with a draft fix: ringfences; denies with E < 4 (an allow rule admits most of their traffic; the line names the admitting rules from `rulesets.json`, or the IP list for X1, and the user confirms that traffic may stop); and every X1 line with a private address, whatever its ease, marked "identify first": an internal host the PCE cannot name is usually a scanner, a backup or monitoring host, a jump box or an unlabelled server, and blocking it unidentified can stop backups or monitoring. Its call plan sits in the `-internal-review` IP list |
 | **Isolate on demand** | the CJ runbooks; nothing is drafted for these |
 | **Watch** | X3 lines that are not also X1, and X6 lines; no draft fix |
 
@@ -129,3 +148,86 @@ nothing else moving.
   visibility-only workload it reports `potentially_blocked`.
 - Rollback of any draft rule is deleting it from the draft; nothing in
   this plan is provisioned.
+
+## 7. The risk map (not the plan score)
+
+`plan.json["risk_map"]` is the "where does the risk sit" view that
+opens every output. It ranks **places**, not fixes, and its
+`risk_rank_score` is deliberately not the `score` above.
+
+**Readiness first.** Labels are never assumed complete. `readiness`
+counts the workloads with both `app` and `env` (`-`, empty and null are
+missing), the enforcement modes of the rest, the traffic and admin-port
+rows with an unlabelled side, and gives a verdict: `ready` (all
+labelled), `partial` (some unlabelled, named with examples), `not ready`
+(no `app`/`env` columns, or no workload with both). Everything scoped
+(X2, X4, X5, the grid, ringfences, environment denies) covers labelled
+workloads only; the rest is a readiness gap the plan states in its
+header and, when it is the majority, leads the fix-first list.
+
+**Apps.** One row per `app (env)` from the whole-window estate summary
+(not the 500-flow admin map), six measures:
+
+| Column | Definition |
+| --- | --- |
+| `unmanaged_inbound` | allowed connections into the app from `external:` or `unlabelled` sources, all ports |
+| `unmanaged_admin_sources` | X1 sources with the app in `peer_apps` (internal and public together; public is a footnote) |
+| `cross_env_connections` | allowed connections from labelled apps in other environments |
+| `cross_env_apps` | distinct labelled apps doing that |
+| `wide_reach_accounts` | review-flagged identities with the app in `destinations` (top 10 per identity, a lower bound) |
+| `workloads_not_enforcing` | workloads of the app not in selective or full |
+
+Each column gets a band 0 to 4: 0 for zero, else the percentile rank
+among the non-zero values (relative, so it works at any estate size
+with no fixed threshold). `risk_rank_score` is the sum of the bands (0
+to 24). Rows sort crown jewels first, then score, then
+`cross_env_connections`. The dashboard shows the bands as shading and
+the raw values as numbers; the score itself is not shown there.
+
+**Headline.** Workloads by enforcement mode; unmanaged admin-port
+sources split internal and public; apps reaching at least three
+quarters of `total_apps` in the lateral-movement result (the top list
+is capped at 20, so a lower bound, over the lateral window); override
+denies not showing in traffic, and how many could not be checked.
+
+**Environment matrix.** `summary.app_to_app` rows whose two envs
+differ, summed by decision per pair, sorted by allowed.
+
+**Rules not showing in traffic (`rule_drift`).** Enabled override denies
+in enabled rulesets whose named traffic is reported `allowed`. Plain
+denies are out: an allow rule legitimately beats them. Three shapes are
+checked (env consumer with All Services against the summary, honouring
+scope; IP-list consumer to all workloads with All Services against the
+unknown endpoints on that list; env consumer with literal ports and an
+app in scope against the admin-port rows); anything else counts as
+`override_denies_unchecked`. Each row carries the enforcing side's
+modes, `rule_updated_at` and whether the rule changed inside the window.
+The wording is "reported allowed", never "broken" or "bypassed": a
+provisioned override deny on an enforcing workload reports blocked, so
+the reasons left are a draft that is not provisioned
+(`compare-draft-active` pending changes are shown beside the table), a
+rule newer than the traffic, or data that is not what it looks like.
+
+**Fix first.** Three to six sentences, each only when its evidence
+exists, in this order: label first (when the estate is not ready or the
+unlabelled workloads are the majority); explain the override denies not
+showing; identify the widest internal unknown admin source; narrow the
+largest crossing into a crown jewel or the top app, keeping Kerberos,
+LDAP and SMB to the directory servers; block the public admin sources
+(only when there are any); fence the top three apps and move them to
+full enforcement when none is there; label the remaining unlabelled
+workloads. No app name is hard-coded.
+
+**Crown jewels on a flat network.** When none is given and the lateral
+result has no bridge (`articulation_points` 0, normal on a flat
+network), the default is the top three production apps by
+`risk_rank_score` with a non-zero score, and the header says so.
+
+## 8. Directory ports in X2 denies
+
+An X2 deny whose ports include 88, 389, 445 or 636 (Kerberos, LDAP, SMB,
+LDAPS) from a user or client environment breaks logins. The line names
+the destination apps receiving those ports (the directory servers, read
+from the admin-port rows) and the call plan carries a carve-out: an
+allow for the source env to those apps on those ports, placed above the
+deny (an allow beats a plain deny), or the ports dropped from the deny.

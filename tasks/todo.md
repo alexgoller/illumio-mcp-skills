@@ -213,3 +213,76 @@ report too, where we would see the risk and the tool recommends what to do".
 One `plan.json` feeds plan.md, report.md and dashboard.jsx, so the three cannot disagree. The
 dashboard is generated, not hand-built: the example file doubles as the template. The empty
 fixture renders every tab with one grey sentence per section and a green banner.
+
+# Rapid risk reduction: risk map (2026-11-05)
+
+Request: the handover in `tasks/handover/risk-map-handover-bundle.zip` (ignored in git):
+add a risk map (first dashboard tab, plan.md line, report.md section) ranked on unmanaged
+inbound, unmanaged admin sources, environment crossings, wide-reach accounts and workloads not
+enforcing; public sources are a footnote. Fix the eight bugs in section 6 first. Test data:
+`bundle/inputs` (demo100, not committed). No PCE calls.
+
+Before state on demo100 (current main): 107 lines (94 X1, 13 X2), 0 today, 107 week, 85 watch,
+10,717,516 allowed connections would stop, 0 crown jewels, 6 impossible `env=-` crossings.
+
+## Section 6 fixes (each with a before/after on demo100)
+- [x] 6.1 `-` is not an environment in `x2_env_crossings` (13 X2 lines become 7)
+- [x] 6.2 `admitting_rules` honours scopes and `unscoped_consumers`
+- [x] 6.3 baseline wording uses `bucket`; resolution note separate
+- [x] 6.4 `unknown` cap flagged when `totals.returned` < `totals.unknown_endpoints`
+- [x] 6.5 X1 IP lists split: public / internal (review) / on a named list (warning); X2 denies
+      warn about Kerberos, LDAP, SMB to domain controllers
+- [x] 6.6 `--lateral-days`, header states the shorter window; Step 3 fallback in SKILL.md
+- [x] 6.7 crown jewels default to top three `--prod-env` apps by `risk_rank_score` when no
+      bridges exist; header says so
+- [x] 6.8 capped admin map: report the span covered (`first_detected`/`last_detected`); SKILL.md
+      skips the re-pull when the rows already sit inside one day
+
+## Risk map
+- [x] `risk_map()` in triage.py: headline, apps (bands by percentile, `risk_rank_score`),
+      env_matrix, rule_drift (override denies only, three shapes, `rule_updated_at`,
+      `override_denies_unchecked`), fix_first (evidence-driven, identify before block for
+      internal sources), optional `draft_active.json` (`total_pending_changes`)
+- [x] Expected on demo100: 101 lines, 10,511,869 allowed would stop (today/week is 79/22, not 0/101: see
+      the review); headline 216/0/206/10; 94 X1
+      (14 internal, 80 public); 19 of 23 wide reach; top apps pos (PCI) 19, payment 18, ad 17,
+      ordering (Production) 17; largest crossing Users to Production 57,107,172 / 2,668,431;
+      drift 9: 1,673,028, 3: 675,127, RF-ordering-Production 6,709; unchecked 7
+- [x] Re-run with public X1 lines removed: pos (PCI) 20, ordering (Production) 18, payment 18,
+      ad 17, ecomm 17; no "public" on the tab
+- [x] Dashboard: "Risk map" first tab (takeaway, 4 KPIs, shaded grid of 12 apps, env matrix,
+      drift table when non-empty, fix first); legends; readable at 400px; empty states
+- [x] plan.md line after the totals; report.md "Where the risk sits" after the summary
+- [x] Docs: SKILL.md (description, overview, Step 3 fallback, Step 6 ninth pull, Step 8,
+      Verification), scoring.md (map section, not the plan score), dashboard-spec.md,
+      dashboard-example.jsx, report-template.md, risk-report-template.md
+- [x] Render demo100 and empty data: every tab, 0 console errors; screenshots inspected
+- [x] Section 8 decided from Illumio semantics and the data, on Alex's instruction (no question
+      asked): selective reports everything a deny does not catch as allowed, so allowed traffic
+      that no draft allow rule admits on a wholly selective side is "allowed, no rule" and
+      deny-safe; internal X1 sources stay override deny in the call plan but always sit in
+      "this week: identify first"; skill palette; ninth pull (compare-draft-active) added
+- [x] Labelling never assumed: readiness verdict (ready / partial / not ready) in every header,
+      the script no longer exits without app/env columns, "label first" leads when unlabelled
+      workloads are the majority
+- [x] PR #16; server issues illumio-mcp-server #70 to #75 filed
+
+## Review
+
+Before, on demo100: 107 lines (6 impossible `env=-` crossings), 0 today, 107 week, no crown
+jewels, one IP list holding all 94 sources, "13. ordering | prod" cited as admitting crossings
+it cannot admit. After: 101 lines (94 X1, 7 X2), 79 today (public sources nothing admits, on
+wholly selective destinations), 22 this week (14 internal sources to identify first, 1 public
+source an allow rule admits, 7 crossings with admitting rules), 3 runbooks defaulted from the
+map (pos PCI, payment, ad), 85 watch, 10,511,869 allowed connections would stop. Headline
+216/0/206/10, 94 sources (14 internal, 80 public), 19 of 23 wide reach, top apps pos (PCI) 19,
+payment 18, ad 17, ordering (Production) 17, largest crossing Users to Production 57,107,172 /
+2,668,431, drift 9: 1,673,028, 3: 675,127, RF-ordering-Production 6,709 (changed inside the
+window), 7 unchecked; readiness partial (10 flowpilot workloads without env). Without public
+sources: pos (PCI) 20, ordering (Production) 18, payment 18, ad 17, ecomm 17, 0 today, and the
+word "public" is nowhere on the tab. All four data sets (demo100, demo100 without public
+sources, the synthetic fixture, workloads only) render eight tabs with no console errors and a
+legend in every section; screenshots of the Risk map at 1280px and 400px inspected. The
+example's DATA block equals a fresh fixture run. The description is under 1024 characters and
+package.sh builds. Not run against a live PCE; the "allowed on selective" rule is inferred from
+enforcement modes and the draft rules, and flagged as such in scoring.md.

@@ -1,24 +1,37 @@
 ---
 name: illumio-rapid-risk-reduction
-description: "Use when the user asks what they can block or fence now with the least chance of breaking something on an Illumio PCE: rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, incident hardening, ransomware quick wins, what to fence first, a 24-hour or 7-day plan. Triages the estate with illumio-mcp tools (unknown admin-port sources, environment-crossing admin ports, internet-exposed listeners, lateral-movement bridges, non-enforcing apps policy already blocks, wide-reach identities), ranks each exposure by blast radius x ease, and produces a one-page plan, a risk report (risk, evidence, recommendation per exposure) and a React dashboard, all draft-only: override deny and deny rules, selective ringfences, an isolation runbook per crown-jewel app, each with its rollback. Never provisions. Not for one app, audit evidence or estate reports (illumio-app-profile, illumio-compliance-evidence, illumio-pce-assessment). Requires illumio-mcp-server 0.13.1 or later."
+description: "Use when the user asks what they can block or fence now with the least chance of breaking something on an Illumio PCE, or where the risk sits: rapid risk reduction, quick wins, what can we block today, ransomware quick wins, what to fence first, 24-hour or 7-day plan, risk map. Triages the estate with illumio-mcp tools (unknown admin-port sources, environment-crossing admin ports, internet-exposed listeners, lateral-movement bridges, non-enforcing apps, wide-reach identities), checks labelling readiness, ranks each exposure by blast radius x ease, and produces a risk map (ranked apps, crossings, rules not showing in traffic, fix first), a one-page plan, a risk report and a React dashboard, all draft-only: override deny and deny rules, selective ringfences, an isolation runbook per crown-jewel app, each with its rollback. Never provisions. Not for one app, audit evidence or estate reports (illumio-app-profile, illumio-compliance-evidence, illumio-pce-assessment). Requires illumio-mcp-server 0.13.1 or later."
 ---
 
 # Illumio Rapid Risk Reduction
 
 One workflow for "what can we block or fence **now** with the least chance
-of breaking something". It reads the estate once, scores every exposure
-by blast radius x ease, and produces three views of one result:
+of breaking something" and "where does the risk sit". It reads the estate
+once, scores every exposure by blast radius x ease, and produces three
+views of one result, each opening with the **risk map**: labelling
+readiness, the apps ranked by unmanaged inbound traffic, unmanaged
+admin-port sources, environment crossings, wide-reach accounts and
+workloads not enforcing; the traffic between environments; the override
+denies that do not show in traffic; and a short fix-first list:
 
 - the **plan**, one page: block these today, fence these this week,
   isolate these on demand, watch these;
 - the **risk report**: every exposure with the risk it carries, what was
   seen, the evidence, and the recommended action;
-- the **dashboard**, a single-file React artifact in the Illumio style.
+- the **dashboard**, a single-file React artifact in the Illumio style,
+  whose first tab is the risk map.
 
 Every fix is a draft call plan marked `DO_NOT_CALL`; the skill creates
 and provisions nothing. Everything comes from illumio-mcp tool calls.
 `scripts/triage.py` merges the saved results, scores them and writes all
 three views from one `plan.json`; it never talks to the PCE.
+
+**Labels are never assumed complete.** Every scoped finding (environment
+denies, ringfences, the app grid) covers workloads carrying both `app`
+and `env`. The script counts the rest as a readiness gap, states it in
+every header, and when no workload is labelled the plan leads with
+"label first" and keeps only the classes that need no label (unknown
+admin-port sources, public sources, identities, the baseline).
 
 ## Constraints
 
@@ -30,20 +43,28 @@ three views from one `plan.json`; it never talks to the PCE.
   with `for`, `tool`, `DO_NOT_CALL` and `_notes` stripped so what is left
   is the tool's input, and say that this skill does not execute writes:
   they can ask for the call outside this skill or use the PCE UI.
-- **Gentle on the PCE.** Eight data pulls plus the connection check:
+- **Gentle on the PCE.** Nine data pulls plus the connection check:
   one traffic summary and one admin-port flow query over the window, one
   lateral-movement pull, one
   `find-unknown-endpoints` (three requests inside), one identity graph,
-  one timeline, one workload pull, one ruleset pull. Reuse every result;
-  do not re-query per app. Every pull that takes a window uses the same
-  one (`start_date` to `end_date`, or `lookback_days` equal to its span,
-  with `end_date` today). On a capped result see Step 2.
+  one timeline, one workload pull, one ruleset pull, one draft-to-active
+  comparison. Reuse every result; do not re-query per app. Every pull
+  that takes a window uses the same one (`start_date` to `end_date`, or
+  `lookback_days` equal to its span, with `end_date` today), except the
+  lateral-movement pull when it times out (Step 3). On a capped result
+  see Step 2.
 - **Illumio semantics in the output** (see `references/scoring.md` section
   6): override deny is for incidents and beats every allow rule; a
   selective ringfence needs its deny rule to bite; deny rules are
   enforced on the consumer side when the consumer is a label or workload,
   and at the destination when it is an IP list; a deny bites only in
-  selective or full enforcement.
+  selective or full enforcement; and a workload in **selective**
+  enforcement reports everything a deny does not catch as `allowed`,
+  whether or not an allow rule exists (full enforcement and visibility
+  report `allowed` only when a rule matched). The script therefore reads
+  the draft rules: allowed traffic that no allow rule admits, on an
+  enforcing side wholly in selective, counts as deny-safe in the ease
+  score and is shown as "allowed, no rule".
 - **Ask one question up front** (Step 0) covering: window (default 30
   days), which `env` values are production (default: values containing
   `prod`), crown-jewel apps as `app (env)` (optional; default: the three
@@ -101,9 +122,18 @@ JSON (`columns` + `data`) with `hostname`, `ip_addresses`,
 `env`, ...). The script derives the enforcement breakdown per app, the
 `env` values, and the hostname-to-app map the traffic sections need. If
 `truncated` is true or `total` reaches `max_results`, the per-app counts
-are partial and the plan says so. The estate must label with `app` and
-`env`; with other keys the script stops and says which classes need
-them.
+are partial and the plan says so.
+
+**Readiness.** Do not assume the estate is labelled. The script counts
+the workloads carrying both `app` and `env` (a `-` or empty cell is
+missing) and writes a verdict into every header: `ready` (all
+labelled), `partial` (some outside every scoped fix, named with their
+enforcement modes) or `not ready` (no `app`/`env` columns, or no
+workload with both). On `not ready` the plan still runs: X1, X3, X6 and
+the baseline need no label, X2, X4, X5 and the app grid are empty, and
+the fix-first list opens with "label first". Say this to the user as the
+first finding; the estate is not ready for scoped rules until it has
+labels, and the skill's job is then to say so, not to invent scope.
 
 ### Step 2: Traffic, one summary and the admin-port map
 
@@ -148,12 +178,19 @@ source usually shows as `external:Any (0.0.0.0/0 and ::/0)` or
 `unlabelled`; internet exposure is read from Step 4, not from here.
 
 **Capped results.** `totals.truncated` on the summary (200k) or
-`total_pce_flows` of 500 on the admin map means a cap was hit. Halve the
-window once and re-pull every window-bound result (Step 2 to Step 6) so
-all inputs share one window; tell the user.
+`total_pce_flows` of 500 on the admin map means a cap was hit. First
+look at the admin map's `first_detected` and `last_detected` columns:
+when every row already sits inside one day, halving the window returns
+the same rows, so skip the re-pull and let the script report the span
+the sample covers (it does so in the header). Otherwise halve the window
+once and re-pull every window-bound result (Step 2 to Step 6) so all
+inputs share one window; tell the user.
 If it is still capped, keep the results: the script marks the counts as
 lower bounds in the plan header and the lines keep their buckets. The
-same rule applies to `totals.flows_truncated` on Step 4 and Step 6.
+same rule applies to `totals.flows_truncated` on Step 4 and Step 6, and
+to Step 4's `top_n`: when `totals.returned` is below
+`totals.unknown_endpoints`, the X1 and X3 counts are lower bounds and
+the header says so.
 
 ### Step 3: Lateral movement
 
@@ -164,9 +201,19 @@ illumio-mcp:detect-lateral-movement-paths
 ```
 
 Saved as `scratch/lateral.json`. `high_risk_bridge_nodes` (`app`, `env`,
-`reachable_apps`) are the X4 ringfence candidates. The tool has no
-truncation flag and its edges include blocked traffic; reach is observed
-connectivity, not allowed connectivity.
+`reachable_apps`) are the X4 ringfence candidates;
+`top_reachable_nodes` (capped at 20) and `total_apps` feed the risk
+map's "apps reaching most of the estate" (reach of at least three
+quarters of `total_apps`, a lower bound when the list is full). The tool
+has no truncation flag and its edges include blocked traffic; reach is
+observed connectivity, not allowed connectivity.
+
+**Timeout fallback.** On a few hundred workloads the 30-day call can
+time out (60 seconds). Retry once with `lookback_days: 7`, keep every
+other pull on the full window, and pass `--lateral-days 7` in Step 7 so
+the plan header states the shorter window. A flat network returns no
+bridge (`articulation_points` 0): that is normal, and the crown jewels
+then default to the top three production apps on the risk map.
 
 ### Step 4: Unknown sources
 
@@ -207,9 +254,22 @@ Unfiltered, saved as `scratch/rulesets.json`. Costs one extra request
 per ruleset for its deny rules; run it once. The script uses it to say
 which apps already have a scoped ruleset (ease +1), which are already
 fenced (a scoped ruleset with a deny to all workloads), which allow rules
-admit a low-ease environment crossing, and whether an `RRR-` ruleset
-already exists (then the deny-rule call plans target it instead of
-creating one).
+could admit an environment crossing or an unknown source (honouring
+ruleset scope and `unscoped_consumers`; a named service cannot be
+resolved and is marked), which enabled override denies name traffic
+that is reported allowed (the risk map's "rules not showing in
+traffic"), and whether an `RRR-` ruleset already exists (then the
+deny-rule call plans target it instead of creating one).
+
+```
+illumio-mcp:compare-draft-active
+```
+
+Saved as `scratch/draft_active.json`. Rulesets are read as draft; this
+says whether the draft is what is active (`status: in_sync`) or how many
+changes are pending (`total_pending_changes`; the lists may be empty).
+The risk map shows the count beside the rules that do not show in
+traffic. The script tolerates the file being missing.
 
 ```
 illumio-mcp:get-traffic-timeline
@@ -230,7 +290,8 @@ python3 <skill dir>/scripts/triage.py \
   --scratch <scratch dir> --out <scratch dir>/rrr \
   --window-days 30 --date YYYY-MM-DD \
   --prod-env prod --prod-env production \
-  --crown app=pay,env=prod
+  --crown app=pay,env=prod \
+  --lateral-days 7
 ```
 
 Use absolute paths: the skill directory for the script, the session's
@@ -239,25 +300,39 @@ the Step 2 window; `--date` is today and names the draft ruleset
 `RRR-<date>`. `--prod-env` and `--crown` are repeatable and come from the
 question in Step 0; omit `--prod-env` to use every `env` value containing
 `prod`, omit `--crown` to default to the three production bridge apps with
-the largest reach. A crown jewel with no workloads in the inventory still
-gets its runbook, flagged "not found, check the label values". Writes
-`plan.json` (every line with its evidence, scores, recommendation and
-call plans), `plan.md` (the one page), `call-plans.md` (the appendix),
-`report.md` (the risk report) and `dashboard.jsx` (the template in
-`references/` with the plan's data in its DATA block). The script is
-tolerant of missing files and says in `plan.json["inputs"]` what it
-read; a missing input empties its exposure class, it does not invent one.
+the largest reach, or, on a flat network with no bridge, the three
+production apps ranked highest on the risk map (the header says which).
+`--lateral-days` is only for the Step 3 fallback. A crown jewel with no
+workloads in the inventory still gets its runbook, flagged "not found,
+check the label values". Writes `plan.json` (every line with its
+evidence, scores, recommendation and call plans, plus the `risk_map`
+block: readiness, headline, ranked apps, environment matrix, rule drift,
+fix first), `plan.md` (the one page, with the map line after the
+totals), `call-plans.md` (the appendix), `report.md` (the risk report,
+with "Where the risk sits" after the executive summary) and
+`dashboard.jsx` (the template in `references/` with the plan's data in
+its DATA block, the Risk map tab first). The script is tolerant of
+missing files and says in `plan.json["inputs"]` what it read; a missing
+input empties its exposure class, it does not invent one.
 
 ### Step 8: Present
 
+- **Lead with the map.** Whatever the format, the first thing the user
+  reads is the readiness verdict and the fix-first list from
+  `plan.json["risk_map"]`: where the risk sits, in five sentences at
+  most, generated from the evidence (no hand-picked apps). Public
+  sources appear only when they exist; on a normal enterprise estate the
+  ranking is driven by unmanaged internal hosts, environment crossings,
+  wide-reach accounts and workloads not enforcing.
 - **Plan**: `plan.md` follows `references/report-template.md`; present it
   in chat with the header assumptions. Keep the script's numbers; do not
   re-derive a score from prose.
 - **Dashboard**: save `dashboard.jsx` as
   `/mnt/user-data/outputs/illumio_rapid_risk_reduction_<date>.jsx` when
   that directory exists, else next to the plan, and present it; it
-  renders as an artifact. `references/dashboard-spec.md` has the
-  checklist. Never hand-build it from prose.
+  renders as an artifact and opens on the Risk map tab.
+  `references/dashboard-spec.md` has the checklist. Never hand-build it
+  from prose.
 - **Report** (when asked for a report or a document): `report.md`
   follows `references/risk-report-template.md`; as a Claude Doc or a
   .docx through the docx skill, pipe-delimited rows become table rows.
@@ -267,16 +342,26 @@ read; a missing input empties its exposure class, it does not invent one.
 ### Verification
 
 Before handing over: every line in "Block today" is a deny or override
-deny with ease 4 or more; every X1 line says "override deny" and every
-ringfence line says "selective" with `deny_consumer any`, and its call
-plan carries `"deny_consumer": "any"`; every call plan block carries
-`DO_NOT_CALL`; every runbook ends in `provision-policy` with its undo; no
-spike is quoted that carried a caveat; and every result's cap flag is
-false, or the plan header names the counts that are lower bounds. The
-dashboard's KPIs and the report's register show the same numbers as the
-plan (they come from one `plan.json`); the dashboard renders every tab
-with the data it has. Nothing was created: the transcript holds no
-`create-*`, `update-*`, `delete-*`, `provision-policy` or
+deny with ease 4 or more and a public or labelled source (an internal
+unknown source is always "this week: identify first"); every X1 line
+says "override deny" and every ringfence line says "selective" with
+`deny_consumer any`, and its call plan carries `"deny_consumer": "any"`;
+every call plan block carries `DO_NOT_CALL`; an X2 deny carrying
+Kerberos, LDAP or SMB names the directory servers and its carve-out;
+every runbook ends in `provision-policy` with its undo; no spike is
+quoted that carried a caveat; and every result's cap flag is false, or
+the plan header names the counts that are lower bounds and the span the
+admin map covers. The header states the labelling readiness and, when
+the lateral pull used a shorter window, says so. The risk map's
+headline, ranked apps, largest crossing and drift rows are identical in
+`plan.md`, `report.md` and the dashboard (one `risk_map` block); the
+fix-first list names no app that the evidence does not; the word
+"public" appears nowhere on the Risk map tab when no public source
+exists; and every drift row says "reported allowed", never "broken" or
+"bypassed". The dashboard's KPIs and the report's register show the
+same numbers as the plan; the dashboard renders every tab with the data
+it has, including an empty estate. Nothing was created: the transcript
+holds no `create-*`, `update-*`, `delete-*`, `provision-policy` or
 `ringfence-batch` call.
 
 ## Mistakes this skill avoids
@@ -297,6 +382,20 @@ with the data it has. Nothing was created: the transcript holds no
   `provision-policy`.
 - Running the lateral-movement or identity tools per app. One estate
   call each.
+- Assuming the estate is labelled. Unlabelled workloads are counted and
+  named as a readiness gap, never silently dropped or guessed into an
+  app; `-` from the server is a missing label, not an environment.
+- Reading `allowed` on a selective workload as "an allow rule admits
+  it". Selective reports everything a deny does not catch as allowed;
+  the draft rules decide.
+- Blocking an internal unknown source before identifying it. On a real
+  network it is usually a scanner, a backup host, a jump box or an
+  unlabelled server; the call plan keeps it in a review list.
+- Calling an override deny "bypassed" or "broken" because its traffic
+  shows as allowed. It is "reported allowed"; the pending changes, the
+  rule's update time and the data decide why.
+- Leading with public sources. They are a footnote that appears only
+  when they exist; seeded demo traffic makes them look like the story.
 
 ## Older servers
 
@@ -309,8 +408,17 @@ so.
 
 ## Server gaps
 
-None blocking. A `get-admin-port-exposure` tool (admin-port traffic
-grouped by source env, destination env, port and decision, read through
-the 200k summary path instead of the 500-flow `get-traffic-flows` path)
-would make the admin map complete on a large estate. File it on
-illumio-mcp-server when `total_pce_flows` hits 500 on a one-week window.
+None blocking; all filed on illumio-mcp-server. An admin-port exposure
+tool read through the 200k summary path would make the admin map
+complete on a large estate (the 500-flow `get-traffic-flows` path
+covered one day of a 30-day window on 216 workloads): issue #70. A
+draft policy decision next to the reported one on the traffic tools
+would make "allowed, no rule" exact instead of inferred from the
+rulesets: #71. Resolving named services in `get-rulesets` would make
+the admitting-rule and drift checks exact: #72.
+`detect-lateral-movement-paths` times out at 30 days on a few hundred
+workloads and caps reach at 20 apps without a total: #73.
+`find-unknown-endpoints` has no flag for the `top_n` cut: #74.
+`compare-draft-active` changes shape when in sync, and grouped flows
+mark an unlabelled side with `-`: #75. When a server release closes
+one, drop the matching inference here.

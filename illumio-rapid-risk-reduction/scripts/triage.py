@@ -12,11 +12,17 @@ Inputs (<scratch>/, all optional except workloads; missing files are reported):
   identities.json      build-identity-graph, include_service_accounts false
   rulesets.json        get-rulesets, pversion draft, unfiltered
   timeline.json        get-traffic-timeline, blocked + potentially_blocked, bucket 1d, spikes
+  draft_active.json    compare-draft-active (optional: says whether the draft rules are provisioned)
 
 Outputs: <out>/plan.json, <out>/plan.md (the one page), <out>/call-plans.md,
 <out>/report.md (the risk report: every exposure with its risk, evidence and
 recommendation) and <out>/dashboard.jsx (the template in references/ with the
-plan's data in its DATA block).
+plan's data in its DATA block). plan.json carries the risk map (where the
+risk sits: labelling readiness, ranked apps, environment matrix, override
+denies not showing in traffic, fix first) that the three views share.
+
+Labels are never assumed complete: workloads without app and env labels are
+counted, kept out of every scoped finding, and reported as a readiness gap.
 
 The script never talks to the PCE. Every rule it writes is a draft for
 review marked DO_NOT_CALL; nothing is created or provisioned.
@@ -34,10 +40,15 @@ from datetime import date
 ADMIN_PORTS = [(p, "tcp") for p in (21, 22, 23, 88, 135, 139, 389, 445, 636, 1433, 1521, 2049,
                                     3306, 3389, 5432, 5900, 5985, 5986, 6379, 9200, 27017)] + [(161, "udp")]
 ADMIN_SET = set(ADMIN_PORTS)
+# Kerberos, LDAP, SMB and LDAPS to the directory servers: a deny on these from a user
+# environment breaks logins, so X2 denies carrying them get a warning and a carve-out.
+DIRECTORY_PORTS = {88: "Kerberos", 389: "LDAP", 445: "SMB", 636: "LDAPS"}
 PROTO_NAMES = {6: "tcp", 17: "udp", 1: "icmp", "6": "tcp", "17": "udp", "1": "icmp"}
 DENIED = ("blocked", "potentially_blocked")
 DECISIONS = ("allowed", "potentially_blocked", "blocked")
 ANY_LIST = "Any (0.0.0.0/0 and ::/0)"
+UNMANAGED_PREFIXES = ("external:", "unlabelled")
+ENFORCING = ("selective", "full")
 
 
 # --------------------------------------------------------------------------- io
@@ -65,6 +76,20 @@ def parse_identity(text) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
+def label_value(v) -> str | None:
+    """A label cell: None, '' and '-' (the server's marker for an unlabelled side) are missing."""
+    s = str(v).strip() if v is not None else ""
+    return s if s and s != "-" else None
+
+
+def env_of(text) -> str | None:
+    """env of an 'app (env)' identity; None for external:*, unlabelled and bare names."""
+    if not isinstance(text, str) or text.startswith(UNMANAGED_PREFIXES):
+        return None
+    pair = parse_identity(text)
+    return pair[1] if pair else None
+
+
 def proto_name(p) -> str:
     return PROTO_NAMES.get(p, str(p).lower())
 
@@ -82,11 +107,17 @@ def clamp(x: int) -> int:
     return max(1, min(5, x))
 
 
-def mix(counts: dict) -> dict:
+def mix(counts: dict, not_admitted: int = 0) -> dict:
+    """Decision mix of the connections a fix touches. `not_admitted` is the part of `allowed`
+    that no draft allow rule admits on workloads in selective enforcement: selective reports
+    everything a deny does not catch as allowed, so a new deny would catch it without
+    contradicting any rule. It counts towards the deny-safe share with the denied decisions."""
     total = sum(counts.get(d, 0) for d in DECISIONS)
-    denied = counts.get("blocked", 0) + counts.get("potentially_blocked", 0)
+    not_admitted = min(int(not_admitted or 0), counts.get("allowed", 0))
+    safe = counts.get("blocked", 0) + counts.get("potentially_blocked", 0) + not_admitted
     return {"allowed": counts.get("allowed", 0), "potentially_blocked": counts.get("potentially_blocked", 0),
-            "blocked": counts.get("blocked", 0), "denied_share": round(denied / total, 2) if total else None}
+            "blocked": counts.get("blocked", 0), "allowed_not_admitted": not_admitted,
+            "denied_share": round(safe / total, 2) if total else None}
 
 
 def ease_base(m: dict) -> int:
@@ -96,27 +127,51 @@ def ease_base(m: dict) -> int:
     return 5 if s >= 0.95 else 4 if s >= 0.70 else 3 if s >= 0.30 else 2
 
 
+def only_selective(modes: Counter | dict) -> bool:
+    """True when every workload on the enforcing side is in selective enforcement, the one
+    mode where a reported `allowed` means only 'no deny matched' (full enforcement and
+    visibility report allowed only when an allow rule matched)."""
+    return bool(modes) and set(modes) <= {"selective"}
+
+
 # ---------------------------------------------------------------------- inputs
 
-def workload_index(rows: list[dict]) -> dict:
+def workload_index(rows: list[dict], has_label_columns: bool = True) -> dict:
+    """Per-app inventory plus the labelling readiness counts. A workload without both app
+    and env is kept out of `apps` (nothing can be scoped to it) and counted in `labels`."""
     apps: dict[tuple, dict] = {}
     hosts: dict[str, dict] = {}
     envs: Counter = Counter()
+    env_modes: dict[str, Counter] = defaultdict(Counter)
+    modes_total: Counter = Counter()
+    labels = {"workloads": 0, "with_app": 0, "with_env": 0, "with_both": 0, "label_columns": has_label_columns,
+              "unlabelled_modes": Counter(), "unlabelled_examples": [], "app_without_env": Counter()}
     for r in rows:
-        app, env = r.get("app"), r.get("env")
-        if env:
-            envs[str(env)] += 1
-        key = (str(app), str(env)) if app and env else None
+        app, env = label_value(r.get("app")), label_value(r.get("env"))
         mode = str(r.get("enforcement_mode") or "unknown")
-        if key:
-            a = apps.setdefault(key, {"workloads": 0, "modes": Counter(), "hostnames": []})
+        labels["workloads"] += 1
+        modes_total[mode] += 1
+        labels["with_app"] += bool(app)
+        labels["with_env"] += bool(env)
+        if env:
+            envs[env] += 1
+            env_modes[env][mode] += 1
+        if app and env:
+            labels["with_both"] += 1
+            a = apps.setdefault((app, env), {"workloads": 0, "modes": Counter(), "hostnames": []})
             a["workloads"] += 1
             a["modes"][mode] += 1
             a["hostnames"].append(str(r.get("hostname") or r.get("name")))
+        else:
+            labels["unlabelled_modes"][mode] += 1
+            if app:
+                labels["app_without_env"][app] += 1
+            if len(labels["unlabelled_examples"]) < 8:
+                labels["unlabelled_examples"].append(str(r.get("hostname") or r.get("name") or app or r.get("href") or "?"))
         for name in (r.get("hostname"), r.get("name")):
             if name:
                 hosts[str(name)] = {"app": app, "env": env, "enforcement_mode": mode}
-    return {"apps": apps, "hosts": hosts, "envs": envs}
+    return {"apps": apps, "hosts": hosts, "envs": envs, "env_modes": env_modes, "modes_total": modes_total, "labels": labels}
 
 
 def pick_prod_envs(given: list[str], envs: Counter) -> list[str]:
@@ -174,36 +229,180 @@ def service_text(s: dict) -> str:
 
 # -------------------------------------------------------------------- exposures
 
-def x1_unknown_admin(unknown: dict | None, policy: dict) -> list[dict]:
+def x1_unknown_admin(unknown: dict | None, policy: dict, rs: dict | None = None, wl: dict | None = None) -> list[dict]:
+    default_lists = ((unknown or {}).get("totals") or {}).get("default_ip_lists") or [ANY_LIST]
     lines = []
     for e in (unknown or {}).get("endpoints", []):
         if "admin_reach" not in (e.get("profile") or []):
             continue
         src = e.get("as_source") or {}
         counts: Counter = Counter()
+        ports = set()
         for p in src.get("ports", []):
             if p.get("admin"):
+                ports.add((int(p.get("port") or 0), proto_name(p.get("proto"))))
                 for d in DECISIONS:
                     counts[d] += (p.get("policy") or {}).get(d, 0)
         ev = (e.get("profile_evidence") or {}).get("admin_reach") or {}
-        m = mix(counts)
+        peer_apps = src.get("peer_apps") or []
+        # An IP-list deny is enforced at the destination: the peer apps' workloads.
+        peer_modes: Counter = Counter()
+        for pa in peer_apps:
+            pair = parse_identity(pa)
+            if pair and wl:
+                peer_modes.update(wl["apps"].get(pair, {}).get("modes", Counter()))
+        admitting = admitting_list_rules(rs, list(e.get("ip_lists") or []) + list(default_lists), ports, peer_apps) if counts["allowed"] else []
+        not_admitted = counts["allowed"] if (not admitting and only_selective(peer_modes)) else 0
+        m = mix(counts, not_admitted)
         b = scale(src.get("peer_workloads", e.get("peer_workloads", 0)), (2, 5, 10, 25))
         ease = clamp(ease_base(m))
+        public = e.get("address_class") == "public"
         lines.append({
             "class": "X1", "kind": "override_deny", "score": b * ease, "blast_radius": b, "ease": ease,
-            "title": f"unknown source {e['ip']}{' (' + e['fqdn'] + ')' if e.get('fqdn') else ''} on "
+            "title": f"unknown {'public' if public else 'internal'} source {e['ip']}{' (' + e['fqdn'] + ')' if e.get('fqdn') else ''} on "
                      f"{', '.join(ev.get('admin_ports') or [])}",
             "ip": e["ip"], "fqdn": e.get("fqdn"), "address_class": e.get("address_class"),
             "ip_lists": e.get("ip_lists") or [], "admin_ports": ev.get("admin_ports") or [], "profile": e.get("profile") or [],
             "allowed_connections": ev.get("allowed_connections", 0),
             "allowed_into_enforced": src.get("allowed_into_enforced", 0),
             "peer_workloads": src.get("peer_workloads", 0), "peers_enforced": e.get("peers_enforced", 0),
-            "peer_apps": src.get("peer_apps") or [], "would_have_blocked": m,
+            "peer_apps": peer_apps, "would_have_blocked": m, "admitting_rules": admitting,
+            "enforcing_side": f"destination workloads of {len(peer_apps)} peer apps: {modes_text(peer_modes)}",
             "evidence": [f"find-unknown-endpoints endpoints[ip={e['ip']}].profile_evidence.admin_reach",
                          f"as_source.ports admin rows ({src.get('connections', 0)} connections as source)"],
             "rollback": "delete the override deny rule from the draft ruleset",
         })
     return sorted(lines, key=lambda l: (-l["score"], -sum(l["would_have_blocked"][d] for d in DECISIONS)))
+
+
+def rule_scopes(r: dict) -> list[dict]:
+    """A ruleset's scope sets as {key: value} dicts; [] (or [[]]) means unscoped, all workloads."""
+    sets = []
+    for scope in r.get("scopes") or []:
+        d = {s.get("key"): s.get("value") for s in scope if isinstance(s, dict) and "key" in s}
+        if d:
+            sets.append(d)
+    return sets
+
+
+def actor_kind(a: dict) -> tuple[str, str | None]:
+    if a.get("all_workloads"):
+        return ("all", None)
+    if "label" in a:
+        return (str(a["label"].get("key")), a["label"].get("value"))
+    if "ip_list" in a:
+        return ("iplist", a["ip_list"].get("name"))
+    if "label_group" in a:
+        return ("label_group", a["label_group"].get("name"))
+    return ("other", None)
+
+
+def side_can_be_env(kinds: list[tuple], env: str, scope_env: str | None, workload_side: bool) -> bool:
+    """Could one side of a rule resolve to workloads carrying env=<env> inside a scope set?
+    Labels in an actor list are combined (a workload must carry all of them), so an env
+    label on the side decides exactly; labels of other keys (role, app, loc) and label
+    groups only could, so they count; all workloads always counts; an IP list counts on the
+    consumer side only (a list can hold workload addresses), never as a provider."""
+    if scope_env and scope_env != env:
+        return False
+    if any(k == "all" for k, _ in kinds):
+        return True
+    envs = {v for k, v in kinds if k == "env"}
+    if envs:
+        return env in envs
+    if any(k not in ("iplist", "env") for k, _ in kinds):
+        return True
+    return any(k == "iplist" for k, _ in kinds) and not workload_side
+
+
+def services_cover(svcs: list[dict], ports: set | None) -> int:
+    """2 when the rule's services name one of the ports (or All Services), 1 for a named
+    service that cannot be resolved here (it could cover them), 0 when the literal ports
+    miss. `ports` None means any service counts."""
+    if ports is None or not svcs:
+        return 2
+    best = 0
+    for s in svcs:
+        if "service" in s:
+            best = max(best, 2 if (s["service"] or {}).get("name") == "All Services" else 1)
+            continue
+        try:
+            lo, hi, pr = int(s.get("port") or 0), int(s.get("to_port") or s.get("port") or 0), proto_name(s.get("proto"))
+        except (TypeError, ValueError):
+            continue
+        if any(lo <= p <= hi and pr == q for p, q in ports):
+            best = 2
+    return best
+
+
+def admitting_rules(rs: dict | None, src_env: str, dst_env: str, ports: set | None = None) -> list[str]:
+    """Allow rules that could admit env=src_env -> env=dst_env on the ports, honouring
+    ruleset scope: providers live inside the scope; consumers do too unless the rule has
+    unscoped_consumers. A ruleset scoped to env=dst_env therefore admits a crossing only
+    through a rule whose consumers are unscoped. Exact matches (literal ports, All
+    Services) come first; a named service cannot be resolved here and is marked."""
+    out = []
+    for r in (rs or {}).get("rulesets", []):
+        if r.get("enabled") is False:
+            continue
+        sets = rule_scopes(r) or [{}]
+        for rule in r.get("rules", []):
+            if rule.get("rule_type") != "allow" or rule.get("enabled") is False:
+                continue
+            cover = services_cover(rule.get("ingress_services") or [], ports)
+            if not cover:
+                continue
+            cons = [actor_kind(a) for a in rule.get("consumers", [])]
+            provs = [actor_kind(a) for a in rule.get("providers", [])]
+            unscoped = bool(rule.get("unscoped_consumers"))
+            hit = 0
+            for s in sets:
+                s_env = s.get("env")
+                p_ok = side_can_be_env(provs, dst_env, s_env, True)
+                c_ok = side_can_be_env(cons, src_env, None if unscoped else s_env, False)
+                if p_ok and c_ok:
+                    # precision: an env label or all workloads names the side exactly; another label key only could
+                    hit = 1 + any(p[0] in ("all", "env") or s_env == dst_env for p in provs) + any(c[0] in ("all", "env") for c in cons)
+                    break
+            if hit:
+                scope_txt = "; ".join(", ".join(f"{k}={v}" for k, v in s.items()) for s in sets if s) or "unscoped"
+                out.append((cover, hit, f"{r.get('name')} [scope {scope_txt}{', unscoped consumers' if unscoped else ''}]: "
+                            f"{', '.join(actor_text(a) for a in rule.get('consumers', []))} -> {', '.join(actor_text(a) for a in rule.get('providers', []))} "
+                            f"on {', '.join(service_text(x) for x in rule.get('ingress_services', []))}" + (" (named service, not resolved here)" if cover == 1 else "")))
+    out.sort(key=lambda t: -(t[0] + t[1]))
+    return [t[2] for t in out[:5]]
+
+
+def admitting_list_rules(rs: dict | None, lists: list[str], ports: set, peer_apps: list[str]) -> list[str]:
+    """Allow rules whose consumer is one of the IP lists holding an unknown source, whose
+    services cover the admin ports seen (a named service cannot be resolved here and counts),
+    and whose ruleset scope reaches a peer app. These are the rules an override deny beats."""
+    want = set(lists)
+    peers = {parse_identity(p) for p in peer_apps} - {None}
+    out = []
+    for r in (rs or {}).get("rulesets", []):
+        if r.get("enabled") is False:
+            continue
+        sets = rule_scopes(r) or [{}]
+        reach = any(not (s.get("app") or s.get("env")) or ((s.get("app"), s.get("env")) in peers)
+                    or (s.get("app") and not s.get("env") and any(a == s["app"] for a, _ in peers))
+                    or (s.get("env") and not s.get("app") and any(e == s["env"] for _, e in peers)) for s in sets)
+        if not reach:
+            continue
+        for rule in r.get("rules", []):
+            if rule.get("rule_type") != "allow" or rule.get("enabled") is False:
+                continue
+            names = {actor_kind(a)[1] for a in rule.get("consumers", []) if actor_kind(a)[0] == "iplist"}
+            if not names & want:
+                continue
+            svcs = rule.get("ingress_services") or []
+            covers = any("service" in s for s in svcs) or any(
+                (int(s.get("port") or 0) <= p <= int(s.get("to_port") or s.get("port") or 0)) and proto_name(s.get("proto")) == pr
+                for s in svcs for p, pr in ports)
+            if covers:
+                out.append(f"{r.get('name')}: {', '.join(actor_text(a) for a in rule.get('consumers', []))} -> "
+                           f"{', '.join(actor_text(a) for a in rule.get('providers', []))} on {', '.join(service_text(x) for x in svcs)}")
+    return out[:5]
 
 
 def x3_public_sources(unknown: dict | None, x1_ips: set) -> list[dict]:
@@ -229,35 +428,71 @@ def x3_public_sources(unknown: dict | None, x1_ips: set) -> list[dict]:
     return sorted(lines, key=lambda l: (-l["allowed_into_enforced"], -l["peer_workloads"]))
 
 
-def x2_env_crossings(admin: dict | None, prod: list[str], rs: dict | None = None) -> list[dict]:
-    """Grouped get-traffic-flows rows: src_app, src_env, dst_app, dst_env, port, proto,
-    policy_decision, num_connections. Only admin ports, only rows with both envs labelled."""
-    groups: dict[tuple, dict] = {}
+def admin_rows(admin: dict | None) -> list[dict]:
+    """Grouped admin-port rows with typed fields; a side whose env is '-' or empty is unlabelled."""
+    out = []
     for row in split_rows(admin):
-        a = (str(row.get("src_app")), str(row.get("src_env"))) if row.get("src_app") and row.get("src_env") else None
-        b = (str(row.get("dst_app")), str(row.get("dst_env"))) if row.get("dst_app") and row.get("dst_env") else None
         try:
             port, proto = int(row.get("port")), proto_name(row.get("proto"))
         except (TypeError, ValueError):
             continue
+        out.append({"src_app": label_value(row.get("src_app")), "src_env": label_value(row.get("src_env")),
+                    "dst_app": label_value(row.get("dst_app")), "dst_env": label_value(row.get("dst_env")),
+                    "port": port, "proto": proto, "policy_decision": row.get("policy_decision") or "unknown",
+                    "num_connections": int(row.get("num_connections") or 0),
+                    "first_detected": row.get("first_detected"), "last_detected": row.get("last_detected")})
+    return out
+
+
+def admin_span(admin: dict | None) -> dict:
+    """What the 500-flow admin map really covers: the detection span of its rows."""
+    rows = [r for r in admin_rows(admin) if r.get("first_detected") and r.get("last_detected")]
+    if not rows:
+        return {"start": None, "end": None, "days": None}
+    start = min(r["first_detected"] for r in rows)
+    end = max(r["last_detected"] for r in rows)
+    try:
+        d0, d1 = date.fromisoformat(start[:10]), date.fromisoformat(end[:10])
+        days = (d1 - d0).days + 1
+    except ValueError:
+        days = None
+    return {"start": start[:10], "end": end[:10], "days": days}
+
+
+def x2_env_crossings(admin: dict | None, prod: list[str], rs: dict | None = None, wl: dict | None = None) -> list[dict]:
+    """Grouped get-traffic-flows rows: src_app, src_env, dst_app, dst_env, port, proto,
+    policy_decision, num_connections. Only admin ports, only rows with both envs labelled;
+    a '-' env is an unlabelled side and never an environment."""
+    groups: dict[tuple, dict] = {}
+    for row in admin_rows(admin):
+        a = (row["src_app"], row["src_env"]) if row["src_app"] and row["src_env"] else None
+        b = (row["dst_app"], row["dst_env"]) if row["dst_app"] and row["dst_env"] else None
+        port, proto = row["port"], row["proto"]
         if not a or not b or a[1] == b[1] or (port, proto) not in ADMIN_SET:
             continue
-        n = int(row.get("num_connections") or 0)
-        dec = row.get("policy_decision") or "unknown"
+        n = row["num_connections"]
+        dec = row["policy_decision"]
         g = groups.setdefault((a[1], b[1]), {"counts": Counter(), "pairs": Counter(), "dst_apps": set(), "src_apps": set(),
-                                             "ports": Counter(), "port_mix": defaultdict(Counter)})
+                                             "ports": Counter(), "port_mix": defaultdict(Counter), "directory": defaultdict(set)})
         g["counts"][dec] += n
         g["pairs"][(f"{a[0]} ({a[1]})", f"{b[0]} ({b[1]})", dec)] += n
         g["dst_apps"].add(b)
         g["src_apps"].add(a)
         g["ports"][f"{port}/{proto}"] += n
         g["port_mix"][f"{port}/{proto}"][dec] += n
+        if port in DIRECTORY_PORTS and proto == "tcp":
+            g["directory"][f"{port}/{proto}"].add(f"{b[0]} ({b[1]})")
     lines = []
     for (src_env, dst_env), g in groups.items():
-        m = mix(g["counts"])
+        admitting = admitting_rules(rs, src_env, dst_env, {(int(p.split("/")[0]), p.split("/")[1]) for p in g["ports"]}) if g["counts"]["allowed"] else []
+        # A label-consumer deny is enforced on the source workloads carrying env=src_env.
+        src_modes = (wl or {}).get("env_modes", {}).get(src_env, Counter())
+        not_admitted = g["counts"]["allowed"] if (not admitting and only_selective(src_modes)) else 0
+        m = mix(g["counts"], not_admitted)
         b = scale(len(g["dst_apps"]), (2, 3, 5, 10))
         ease = clamp(ease_base(m) + 1)
         seen_ports = g["ports"]
+        directory = {p: sorted(apps) for p, apps in sorted(g["directory"].items())}
         lines.append({
             "class": "X2", "kind": "deny", "score": b * ease, "blast_radius": b, "ease": ease,
             "title": f"admin ports env={src_env} -> env={dst_env}" + (" (production)" if dst_env in prod else ""),
@@ -266,32 +501,15 @@ def x2_env_crossings(admin: dict | None, prod: list[str], rs: dict | None = None
             "src_apps": sorted(f"{a} ({e})" for a, e in g["src_apps"]),
             "ports_seen": [f"{p} ({n}: {', '.join(f'{d} {c}' for d, c in g['port_mix'][p].items())})" for p, n in seen_ports.most_common(8)],
             "ports": sorted(seen_ports, key=lambda x: int(x.split('/')[0])),
+            "directory_ports": directory,
             "app_pairs": [{"from": f, "to": t, "policy": p, "connections": n}
                           for (f, t, p), n in sorted(g["pairs"].items(), key=lambda kv: -kv[1])[:10]],
-            "would_have_blocked": m, "admitting_rules": admitting_rules(rs, src_env, dst_env) if m["allowed"] else [],
+            "would_have_blocked": m, "admitting_rules": admitting,
+            "enforcing_side": f"source workloads env={src_env}: {modes_text(src_modes)}",
             "evidence": [f"admin-port flows rows env={src_env} -> env={dst_env} ({len(g['pairs'])} app pairs, {len(seen_ports)} ports)"],
             "rollback": "delete the deny rule from the draft ruleset",
         })
     return sorted(lines, key=lambda l: (-l["to_production"], -l["score"]))
-
-
-def admitting_rules(rs: dict | None, src_env: str, dst_env: str) -> list[str]:
-    """Allow rules that could admit env=src_env -> env=dst_env: consumer names that env,
-    all workloads or an IP list, and the ruleset is scoped to dst_env or the provider names it."""
-    out = []
-    for r in (rs or {}).get("rulesets", []):
-        scoped_dst = any(any(isinstance(x, dict) and x.get("key") == "env" and x.get("value") == dst_env for x in scope)
-                         for scope in (r.get("scopes") or []))
-        for rule in r.get("rules", []):
-            if rule.get("rule_type") != "allow":
-                continue
-            cons = [actor_text(a) for a in rule.get("consumers", [])]
-            provs = [actor_text(a) for a in rule.get("providers", [])]
-            c_ok = any(c in (f"env={src_env}", "all workloads") or c.startswith("iplist:") for c in cons)
-            p_ok = scoped_dst or any(pv in (f"env={dst_env}", "all workloads") for pv in provs)
-            if c_ok and p_ok:
-                out.append(f"{r.get('name')}: {', '.join(cons)} -> {', '.join(provs)} on {', '.join(service_text(x) for x in rule.get('ingress_services', []))}")
-    return out[:5]
 
 
 def inbound_remotes(summary: dict | None, app: tuple) -> dict:
@@ -381,12 +599,19 @@ def x6_identities(ident: dict | None) -> list[dict]:
     return sorted(lines, key=lambda l: (-l["blast_radius"], -(l["connections"] or 0)))
 
 
-def crown_jewels(given: list[tuple], ringfences: list[dict], prod: list[str]) -> tuple[list[tuple], str]:
+def crown_jewels(given: list[tuple], ringfences: list[dict], prod: list[str], map_rows: list[dict] | None = None) -> tuple[list[tuple], str]:
     if given:
         return given, "given by the user"
     bridges = sorted((l for l in ringfences if "bridge" in l["why"] and l["env"] in prod),
                      key=lambda l: -l["why"]["bridge"]["reachable_apps"])
-    return [(l["app"], l["env"]) for l in bridges[:3]], "defaulted to the three production bridge apps with the largest reach"
+    if bridges:
+        return [(l["app"], l["env"]) for l in bridges[:3]], "defaulted to the three production bridge apps with the largest reach"
+    # A flat network has no articulation points, so no bridges: fall back to the risk map.
+    ranked = [parse_identity(r["app"]) for r in (map_rows or [])
+              if parse_identity(r["app"]) and parse_identity(r["app"])[1] in prod and r["workloads"] and r["risk_rank_score"]]
+    if ranked:
+        return ranked[:3], "defaulted to the three production apps ranked highest on the risk map (no bridge app in the lateral-movement result)"
+    return [], "none: no crown jewels given, no bridge app and no production app on the map"
 
 
 # ------------------------------------------------------------------- baseline
@@ -399,7 +624,8 @@ def baseline(t: dict | None) -> dict:
     nonzero = sorted(f for f in flows if f)
     median = nonzero[len(nonzero) // 2] if nonzero else 0
     sp = t.get("spikes") or {}
-    return {"available": True, "bucket": t.get("bucket"), "effective_bucket": t.get("effective_bucket"),
+    return {"available": True, "bucket": t.get("bucket") or "1d", "effective_bucket": t.get("effective_bucket"),
+            "resolution_note": t.get("resolution_note"),
             "days": len(series), "total_flows": sum(flows), "median_nonzero": median,
             "worst": None if sp.get("caveat") else sp.get("worst"), "caveat": sp.get("caveat"),
             "threshold": sp.get("threshold"), "spike_buckets": sp.get("buckets") or [],
@@ -408,19 +634,42 @@ def baseline(t: dict | None) -> dict:
 
 # ------------------------------------------------------------------ call plans
 
+def x1_group(l: dict, default_lists: list[str]) -> str:
+    """Which IP list an X1 source goes in: a source already on a named list was admitted on
+    purpose, an internal source is usually a scanner, backup or unlabelled server to identify
+    first, a public source with no allowed traffic can be blocked today."""
+    if l["address_class"] != "public":
+        return "internal"
+    if [n for n in l["ip_lists"] if n not in default_lists]:
+        return "listed"
+    return "today" if l.get("bucket") == "today" else "review"
+
+
+X1_GROUPS = {
+    "today": ("", "public sources on admin ports; nothing in the draft admits them"),
+    "review": ("-review", "public sources on admin ports that an allow rule admits today; review that rule before the deny"),
+    "internal": ("-internal-review", "internal (private) sources on admin ports: identify each one (scanner, backup, jump host, unlabelled server), then label it or keep it here"),
+    "listed": ("-listed-review", "public sources already on a named IP list: policy names that list, so check the rules that use it (allow or deny) with the list owner before this override deny"),
+}
+
+
 def call_plans(p: dict) -> list[dict]:
     rs = p["ruleset_name"]
+    default_lists = p.get("default_ip_lists") or [ANY_LIST]
     plans = []
-    x1_groups = [("today", [l for l in p["buckets"]["today"] if l["class"] == "X1"], ""),
-                 ("week", [l for l in p["buckets"]["week"] if l["class"] == "X1"], "-review")]
-    for bucket, x1, suffix in x1_groups:
+    groups: dict[str, list[dict]] = {g: [] for g in X1_GROUPS}
+    for l in p["lines"]:
+        if l["class"] == "X1":
+            groups[x1_group(l, default_lists)].append(l)
+    for g, x1 in groups.items():
         if not x1:
             continue
-        list_name = f"RRR-unknown-admin-sources-{p['date']}{suffix}"
-        plans.append({"for": f"X1 ({bucket})", "tool": "create-iplist", "DO_NOT_CALL": "draft for review", "name": list_name,
-                      "description": "Unknown (non-workload) sources seen on admin ports; rapid risk reduction"
-                                     + ("; these admit allowed traffic, review before the deny" if suffix else ""),
-                      "ip_ranges": [{"from_ip": l["ip"], "description": l.get("fqdn") or "unknown source"} for l in x1]})
+        suffix, why = X1_GROUPS[g]
+        plans.append({"for": f"X1 ({g})", "tool": "create-iplist", "DO_NOT_CALL": "draft for review",
+                      "name": f"RRR-unknown-admin-sources-{p['date']}{suffix}",
+                      "description": f"Rapid risk reduction: {why}",
+                      "ip_ranges": [{"from_ip": l["ip"], "description": (l.get("fqdn") or "unknown source")
+                                     + (f"; on lists {', '.join(l['ip_lists'])}" if g == "listed" else "")} for l in x1]})
     if any(l["class"] in ("X1", "X2") for l in p["lines"]):
         if p["policy"]["rrr_rulesets"]:
             plans.append({"for": "ruleset", "tool": None, "DO_NOT_CALL": "nothing to call",
@@ -429,25 +678,44 @@ def call_plans(p: dict) -> list[dict]:
             plans.append({"for": "ruleset", "tool": "create-ruleset", "DO_NOT_CALL": "draft for review", "name": rs,
                           "description": f"Rapid risk reduction drafts {p['date']}; unscoped (scopes: [] = all workloads)",
                           "scopes": []})
-    for bucket, x1, suffix in x1_groups:
+    for g, x1 in groups.items():
         if not x1:
             continue
-        list_name = f"RRR-unknown-admin-sources-{p['date']}{suffix}"
+        suffix, why = X1_GROUPS[g]
         ports = sorted({ap for l in x1 for ap in l["admin_ports"]})
-        plans.append({"for": f"X1 ({bucket})", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review", "ruleset_name": rs,
-                      "consumers": [f"iplist:{list_name}"], "providers": ["ams"],
+        notes = {"why_override": "incident-grade block: must hold even where an allow rule admits the source",
+                 "sources": why,
+                 "would_have_blocked": {d: sum(l["would_have_blocked"][d] for l in x1) for d in DECISIONS}}
+        if g == "internal":
+            notes["identify_first"] = "an internal host the PCE cannot name is usually a scanner, a backup or monitoring host, a jump box or an unlabelled server; blocking it before identifying it can stop backups or monitoring"
+        if g in ("listed", "internal"):
+            lists = sorted({n for l in x1 for n in l["ip_lists"] if n not in default_lists})
+            if lists:
+                notes["named_lists"] = lists
+                notes["existing_rules_naming_the_lists"] = sorted({f"{d['ruleset']} ({d['rule_type']}): {', '.join(d['consumers'])} -> {', '.join(d['providers'])}"
+                                                                   for d in p["policy"]["deny_rules"] if any(f"iplist:{n}" in d["consumers"] for n in lists)})
+                notes["admitting_allow_rules"] = sorted({r for l in x1 for r in l.get("admitting_rules", [])})
+        if g == "listed":
+            notes["warning"] = "override deny beats every allow rule that admits these lists; the list owner must agree"
+        plans.append({"for": f"X1 ({g})", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review", "ruleset_name": rs,
+                      "consumers": [f"iplist:RRR-unknown-admin-sources-{p['date']}{suffix}"], "providers": ["ams"],
                       "ingress_services": [{"port": int(ap.split('/')[0]), "proto": ap.split('/')[1]} for ap in ports],
-                      "override_deny": True, "unscoped_consumers": True,
-                      "_notes": {"why_override": "incident-grade block: must hold even where an allow rule admits the source",
-                                 "would_have_blocked": {d: sum(l["would_have_blocked"][d] for l in x1) for d in DECISIONS}}})
+                      "override_deny": True, "unscoped_consumers": True, "_notes": notes})
     for l in p["lines"]:
         if l["class"] == "X2":
+            notes = {"enforced_on": f"managed workloads carrying env={l['src_env']} in selective or full enforcement",
+                     "would_have_blocked": l["would_have_blocked"], "admitting_rules": l.get("admitting_rules", [])}
+            if l.get("directory_ports"):
+                notes["directory_warning"] = directory_warning(l)
+                notes["carve_out"] = {"tool": "create-rule", "DO_NOT_CALL": "draft for review, before the deny",
+                                      "consumers": [f"env={l['src_env']}"],
+                                      "providers": sorted({a for apps in l["directory_ports"].values() for a in apps}),
+                                      "ingress_services": [{"port": int(ps.split('/')[0]), "proto": ps.split('/')[1]} for ps in l["directory_ports"]],
+                                      "_notes": "an allow for the directory servers on these ports beats the plain deny; alternatively drop the ports from the deny"}
             plans.append({"for": f"X2 {l['src_env']}->{l['dst_env']}", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review",
                           "ruleset_name": rs, "consumers": [f"env={l['src_env']}"], "providers": [f"env={l['dst_env']}"],
                           "ingress_services": [{"port": int(ps.split('/')[0]), "proto": ps.split('/')[1]} for ps in l["ports"]],
-                          "override_deny": False, "unscoped_consumers": True,
-                          "_notes": {"enforced_on": f"managed workloads carrying env={l['src_env']} in selective or full enforcement",
-                                     "would_have_blocked": l["would_have_blocked"], "admitting_rules": l.get("admitting_rules", [])}})
+                          "override_deny": False, "unscoped_consumers": True, "_notes": notes})
     for l in p["lines"]:
         if l["kind"] == "ringfence":
             base = {"app_name": l["app"], "env_name": l["env"], "lookback_days": p["window_days"]}
@@ -476,6 +744,307 @@ def call_plans(p: dict) -> list[dict]:
     return plans
 
 
+# -------------------------------------------------------------------- risk map
+
+def bands(values: list) -> list[int]:
+    """0 for zero, else 1 to 4 by percentile rank among the non-zero values: relative, so the
+    shading works at any estate size without fixed thresholds."""
+    nz = sorted(v for v in values if v)
+    def band(v):
+        if not v:
+            return 0
+        below = sum(1 for x in nz if x <= v)
+        return min(4, 1 + int(4 * (below - 1) / max(1, len(nz))))
+    return [band(v) for v in values]
+
+
+def readiness(wl: dict, summary: dict | None, admin: dict | None, unknown: dict | None) -> dict:
+    """Labelling readiness: labels are never assumed complete. Everything scoped (X2, X4, X5,
+    the grid, the ringfences, the env denies) needs app and env on the workload; what lacks
+    them is counted here and leads the plan when it is the majority."""
+    lab = wl["labels"]
+    n, both = lab["workloads"], lab["with_both"]
+    unl = n - both
+    traffic_unl = sum(r.get("connections", 0) for r in (summary or {}).get("app_to_app", [])
+                      if r.get("from") == "unlabelled" or r.get("to") == "unlabelled")
+    admin_unl = [r for r in admin_rows(admin) if (r["src_app"] and not r["src_env"]) or (r["dst_app"] and not r["dst_env"])
+                 or (r["src_env"] and not r["src_app"]) or (r["dst_env"] and not r["dst_app"])]
+    seen = ((unknown or {}).get("totals") or {}).get("unlabelled_workloads_seen")
+    if not lab["label_columns"] or (n and both == 0):
+        verdict = "not ready"
+    elif unl:
+        verdict = "partial"
+    else:
+        verdict = "ready"
+    notes = []
+    if not lab["label_columns"]:
+        notes.append("the workload inventory has no app or env label column: nothing can be scoped, fenced or ranked by app until workloads are labelled")
+    elif n and both == 0:
+        notes.append("no workload carries both an app and an env label: nothing can be scoped, fenced or ranked by app until they do")
+    elif unl:
+        notes.append(f"{unl} of {n} workloads lack app or env ({n - lab['with_app']} without app, {n - lab['with_env']} without env; "
+                     f"{modes_text(lab['unlabelled_modes'])}): they sit outside every grid row, ringfence and environment deny")
+        if lab["app_without_env"]:
+            notes.append("apps with workloads missing env: " + ", ".join(f"{a} ({c})" for a, c in lab["app_without_env"].most_common(6)))
+    if traffic_unl:
+        notes.append(f"{traffic_unl} connections in the estate summary involve an unlabelled workload")
+    if admin_unl:
+        notes.append(f"{len(admin_unl)} admin-port rows have an unlabelled side (the server reports it as '-'); they are not environment crossings")
+    if seen:
+        notes.append(f"{seen} unlabelled workloads were seen as peers of unknown sources")
+    return {"verdict": verdict, "workloads": n, "labelled": both, "unlabelled": unl, "with_app": lab["with_app"], "with_env": lab["with_env"],
+            "label_columns": lab["label_columns"], "unlabelled_modes": dict(lab["unlabelled_modes"]), "unlabelled_examples": lab["unlabelled_examples"],
+            "traffic_connections_unlabelled": traffic_unl, "admin_rows_unlabelled": len(admin_unl), "unlabelled_seen_by_unknown_sources": seen,
+            "share_labelled": round(both / n, 2) if n else None, "notes": notes}
+
+
+def map_apps(summary: dict | None, lines: list[dict], ident: dict | None, wl: dict) -> list[dict]:
+    """One row per app (env) with the six measures and their bands. Whole-window summary, not
+    the 500-flow admin map."""
+    un, cross, cross_apps = Counter(), Counter(), defaultdict(set)
+    for r in (summary or {}).get("app_to_app", []):
+        if r.get("policy") != "allowed":
+            continue
+        f, t = r.get("from"), r.get("to")
+        te = env_of(t)
+        if te is None:
+            continue
+        if isinstance(f, str) and f.startswith(UNMANAGED_PREFIXES):
+            un[t] += r.get("connections", 0)
+        elif env_of(f) not in (None, te):
+            cross[t] += r.get("connections", 0)
+            cross_apps[t].add(f)
+    internal, public = defaultdict(set), defaultdict(set)
+    for l in lines:
+        if l["class"] == "X1":
+            for a in l["peer_apps"]:
+                (public if l["address_class"] == "public" else internal)[a].add(l["ip"])
+    review = {f.get("identity") for f in (ident or {}).get("findings", []) if f.get("interest") == "review"}
+    acct = defaultdict(set)
+    for i in (ident or {}).get("identities", []):
+        if i.get("identity") in review:
+            for d in i.get("destinations") or []:   # top 10 per identity, so a lower bound
+                if env_of(d.get("to")) is not None:
+                    acct[d["to"]].add(i["identity"])
+    wl_total = {f"{a} ({e})": v["workloads"] for (a, e), v in wl["apps"].items()}
+    wl_off = {f"{a} ({e})": sum(c for m, c in v["modes"].items() if m not in ENFORCING) for (a, e), v in wl["apps"].items()}
+    names = sorted(set(wl_total) | set(un) | set(cross))
+    cols = {
+        "unmanaged_inbound": [un[a] for a in names],
+        "unmanaged_admin_sources": [len(internal[a]) + len(public[a]) for a in names],
+        "cross_env_connections": [cross[a] for a in names],
+        "cross_env_apps": [len(cross_apps[a]) for a in names],
+        "wide_reach_accounts": [len(acct[a]) for a in names],
+        "workloads_not_enforcing": [wl_off.get(a, 0) for a in names],
+    }
+    b = {k: bands(v) for k, v in cols.items()}
+    rows = []
+    for i, a in enumerate(names):
+        row = {"app": a, "workloads": wl_total.get(a, 0), "crown_jewel": False,
+               "public_admin_sources": len(public[a]), "internal_admin_sources": len(internal[a]),
+               **{k: cols[k][i] for k in cols}, "bands": {k: b[k][i] for k in cols}}
+        row["risk_rank_score"] = sum(row["bands"].values())
+        rows.append(row)
+    return rank_apps(rows)
+
+
+def rank_apps(rows: list[dict]) -> list[dict]:
+    return sorted(rows, key=lambda r: (not r["crown_jewel"], -r["risk_rank_score"], -r["cross_env_connections"], r["app"]))
+
+
+def env_matrix(summary: dict | None) -> list[dict]:
+    m: dict[tuple, Counter] = defaultdict(Counter)
+    for r in (summary or {}).get("app_to_app", []):
+        a, b = env_of(r.get("from")), env_of(r.get("to"))
+        if a and b and a != b:
+            m[(a, b)][r.get("policy")] += r.get("connections", 0)
+    return sorted(({"from": a, "to": b, "allowed": c.get("allowed", 0), "potentially_blocked": c.get("potentially_blocked", 0), "blocked": c.get("blocked", 0)}
+                   for (a, b), c in m.items()), key=lambda r: -r["allowed"])
+
+
+def rule_drift(rs: dict | None, summary: dict | None, unknown: dict | None, admin: dict | None, wl: dict, window_start: str | None) -> tuple[list[dict], int]:
+    """Enabled override denies, in enabled rulesets, whose named traffic is reported allowed.
+    Plain denies are out: an allow rule legitimately beats them. Three rule shapes are
+    checked; everything else (role labels, named services) is counted as unchecked."""
+    found, unchecked = [], 0
+    arows = admin_rows(admin)
+    a2a = (summary or {}).get("app_to_app", [])
+    endpoints = (unknown or {}).get("endpoints", [])
+    for r in (rs or {}).get("rulesets", []):
+        if not r.get("enabled"):
+            continue
+        scope = {(k, v) for s in rule_scopes(r) for k, v in s.items()}
+        s_env = {v for k, v in scope if k == "env"}
+        s_app = {v for k, v in scope if k == "app"}
+        for rule in r.get("rules", []):
+            if rule.get("rule_type") != "override_deny" or not rule.get("enabled"):
+                continue
+            cons = [actor_kind(a) for a in rule.get("consumers", [])]
+            prov = [actor_kind(a) for a in rule.get("providers", [])]
+            svcs = rule.get("ingress_services") or []
+            all_svc = any((s.get("service") or {}).get("name") == "All Services" for s in svcs)
+            ports = {(int(s["port"]), proto_name(s.get("proto"))) for s in svcs if s.get("port")}
+            c_env = {v for k, v in cons if k == "env"}
+            c_ip = [v for k, v in cons if k == "iplist" and not (v or "").startswith("Any")]
+            p_all = ("all", None) in prov
+            p_env = {v for k, v in prov if k == "env"}
+            n, basis, enforced = None, None, None
+            if all_svc and c_env and (p_all or p_env):
+                n = sum(x.get("connections", 0) for x in a2a if x.get("policy") == "allowed"
+                        and env_of(x.get("from")) in c_env and env_of(x.get("to")) and (p_all or env_of(x.get("to")) in p_env)
+                        and (not s_env or env_of(x.get("to")) in s_env) and (not s_app or parse_identity(x.get("to"))[0] in s_app)
+                        and env_of(x.get("from")) != env_of(x.get("to")))
+                basis = "window, all ports"
+                modes = Counter()
+                for e in c_env:
+                    modes.update(wl["env_modes"].get(e, Counter()))
+                enforced = f"source workloads env={', env='.join(sorted(c_env))}: {modes_text(modes)}"
+            elif all_svc and c_ip and p_all:
+                n = sum(((e.get("as_source") or {}).get("policy") or {}).get("allowed", 0)
+                        for e in endpoints if set(c_ip) & set(e.get("ip_lists") or []))
+                basis = "window, all ports, top endpoints only"
+                enforced = f"destination workloads (all): {modes_text(wl['modes_total'])}"
+            elif ports and c_env and p_all and s_app:
+                n = sum(x["num_connections"] for x in arows if x["policy_decision"] == "allowed"
+                        and x["src_env"] in c_env and x["dst_app"] in s_app and (not s_env or x["dst_env"] in s_env)
+                        and (x["port"], x["proto"]) in ports)
+                basis = "admin-port sample"
+                modes = Counter()
+                for e in c_env:
+                    modes.update(wl["env_modes"].get(e, Counter()))
+                enforced = f"source workloads env={', env='.join(sorted(c_env))}: {modes_text(modes)}"
+            else:
+                unchecked += 1
+                continue
+            if n:
+                upd = rule.get("updated_at")
+                found.append({"ruleset": r.get("name"), "rule_href": rule.get("href"),
+                              "consumers": [actor_text(a) for a in rule.get("consumers", [])],
+                              "providers": [actor_text(a) for a in rule.get("providers", [])],
+                              "services": [service_text(s) for s in svcs],
+                              "allowed_connections": n, "basis": basis, "enforced_on": enforced,
+                              "rule_updated_at": upd, "changed_in_window": bool(upd and window_start and str(upd) >= str(window_start))})
+    return sorted(found, key=lambda x: -x["allowed_connections"]), unchecked
+
+
+def draft_state(da: dict | None) -> dict:
+    """compare-draft-active: in sync, or a count of pending changes (the lists may be empty)."""
+    if not da:
+        return {"available": False}
+    if da.get("status") == "in_sync":
+        return {"available": True, "pending": 0, "created": 0, "updated": 0, "deleted": 0}
+    return {"available": True, "pending": int(da.get("total_pending_changes") or 0), "created": int(da.get("created_count") or 0),
+            "updated": int(da.get("updated_count") or 0), "deleted": int(da.get("deleted_count") or 0)}
+
+
+def fix_first(rm: dict, lines: list[dict], crown: list[str]) -> list[str]:
+    """Three to five sentences, each only when its evidence exists, in a fixed order. Nothing
+    here is hard-coded to an app."""
+    out = []
+    ready = rm["readiness"]
+    label_first = ready["verdict"] == "not ready" or (ready["workloads"] and ready["unlabelled"] * 2 >= ready["workloads"])
+    label_sentence = None
+    if ready["verdict"] != "ready":
+        if ready["verdict"] == "not ready":
+            label_sentence = ("Label the workloads first: " + (ready["notes"][0] if ready["notes"] else "no app and env labels") +
+                             ". Until then the plan can only block unknown admin-port sources and watch public sources and identities.")
+        else:
+            label_sentence = (f"Label the {ready['unlabelled']} workloads without app or env ({', '.join(ready['unlabelled_examples'][:4])}"
+                              f"{', ...' if len(ready['unlabelled_examples']) > 4 else ''}): they are outside every ringfence, environment deny and grid row.")
+    if label_first and label_sentence:
+        out.append(label_sentence)
+    h = rm["headline"]
+    if rm["rule_drift"]:
+        names = ", ".join(d["ruleset"] for d in rm["rule_drift"][:3])
+        pend = rm["draft_active"]
+        out.append(f"Explain why {len(rm['rule_drift'])} enabled override den{'y' if len(rm['rule_drift']) == 1 else 'ies'} ({names}) "
+                   f"{'does' if len(rm['rule_drift']) == 1 else 'do'} not show as blocked in the traffic: a provisioned override deny on an enforcing workload reports blocked, "
+                   + (f"and the draft has {pend['pending']} pending change{'s' if pend['pending'] != 1 else ''}; " if pend.get("available") else "and the rules were read as draft; ")
+                   + "every later step relies on rules biting.")
+    internal = [l for l in lines if l["class"] == "X1" and l["address_class"] != "public"]
+    if internal:
+        widest = max(internal, key=lambda l: (l["peer_workloads"], l["would_have_blocked"]["allowed"]))
+        out.append(f"Identify the {len(internal)} internal host{'s' if len(internal) > 1 else ''} on admin ports, starting with {widest['ip']}"
+                   f"{' (' + widest['fqdn'] + ')' if widest.get('fqdn') else ''}, which reaches {widest['peer_workloads']} workloads; then label each one or block it.")
+    top = [r["app"] for r in rm["apps"][:1]]
+    targets = set(crown) | set(top)
+    x2 = [l for l in lines if l["class"] == "X2"]
+    hit = [(l, a) for l in x2 for a in l["dst_apps"] if a in targets]
+    if hit:
+        l, a = max(hit, key=lambda la: la[0]["would_have_blocked"]["allowed"] + la[0]["would_have_blocked"]["potentially_blocked"])
+        out.append(f"Narrow the admin-port crossing env={l['src_env']} to env={l['dst_env']} into {a} ({', '.join(l['ports'][:6])}), "
+                   "keeping Kerberos, LDAP and SMB to the directory servers open.")
+    if h["unmanaged_admin_public"]:
+        out.append(f"Block the {h['unmanaged_admin_public']} public source{'s' if h['unmanaged_admin_public'] > 1 else ''} on admin ports with the override deny from the X1 list.")
+    if h["workloads"] and not h["full_enforcement"]:
+        three = ", ".join(r["app"] for r in rm["apps"][:3])
+        if three:
+            out.append(f"No workload is in full enforcement: fence {three} first and move them to full enforcement.")
+    if label_sentence and not label_first:
+        out.append(label_sentence)
+    return out[:6]
+
+
+def takeaway(rm: dict) -> str:
+    h, ready = rm["headline"], rm["readiness"]
+    if ready["verdict"] == "not ready":
+        return "The estate is not ready for scoped fixes: " + (ready["notes"][0] if ready["notes"] else "workloads carry no app and env labels") + "."
+    parts = []
+    top = [r["app"] for r in rm["apps"][:3] if r["risk_rank_score"]]
+    if top:
+        parts.append("most exposure sits in " + ", ".join(top))
+    if rm["env_matrix"]:
+        m = rm["env_matrix"][0]
+        parts.append(f"the largest environment crossing is {m['from']} to {m['to']} with {m['allowed']:,} allowed connections")
+    if h["unmanaged_admin_sources"]:
+        parts.append(f"{h['unmanaged_admin_sources']} unmanaged sources reach workloads on admin ports")
+    if rm["rule_drift"]:
+        parts.append(f"{len(rm['rule_drift'])} override den{'y does' if len(rm['rule_drift']) == 1 else 'ies do'} not show in traffic")
+    if ready["verdict"] == "partial":
+        parts.append(f"{ready['unlabelled']} of {ready['workloads']} workloads are unlabelled")
+    if not parts:
+        return "No exposure stands out in this window."
+    return (parts[0][0].upper() + parts[0][1:]) + ("; " + "; ".join(parts[1:]) if len(parts) > 1 else "") + "."
+
+
+def risk_map(data: dict, wl: dict, lines: list[dict], window_start: str | None, lateral_days: int | None) -> dict:
+    lat = data.get("lateral") or {}
+    nodes = lat.get("top_reachable_nodes") or []
+    total_apps = lat.get("total_apps")
+    wide = (sum(1 for n in nodes if n.get("reachable_apps", 0) >= 0.75 * total_apps) if nodes and total_apps else None)
+    x1 = [l for l in lines if l["class"] == "X1"]
+    drifted, unchecked = rule_drift(data.get("rulesets"), data.get("summary"), data.get("unknown"), data.get("admin_ports"), wl, window_start)
+    modes = wl["modes_total"]
+    rm = {
+        "readiness": readiness(wl, data.get("summary"), data.get("admin_ports"), data.get("unknown")),
+        "headline": {"workloads": sum(modes.values()), "full_enforcement": modes.get("full", 0), "selective": modes.get("selective", 0),
+                     "not_enforcing": sum(v for k, v in modes.items() if k not in ENFORCING),
+                     "unmanaged_admin_sources": len(x1),
+                     "unmanaged_admin_internal": sum(l["address_class"] != "public" for l in x1),
+                     "unmanaged_admin_public": sum(l["address_class"] == "public" for l in x1),
+                     "apps_in_graph": total_apps, "wide_reach_apps": wide, "wide_reach_lower_bound": len(nodes) >= 20,
+                     "lateral_days": lateral_days,
+                     "override_denies_not_showing": len(drifted), "override_denies_unchecked": unchecked},
+        "apps": map_apps(data.get("summary"), lines, data.get("identities"), wl),
+        "env_matrix": env_matrix(data.get("summary")),
+        "rule_drift": drifted,
+        "draft_active": draft_state(data.get("draft_active")),
+        "inputs": {"summary": data.get("summary") is not None, "lateral": bool(nodes), "rulesets": data.get("rulesets") is not None,
+                   "identities": bool((data.get("identities") or {}).get("identities")), "unknown": data.get("unknown") is not None},
+        "apps_without_env_excluded": wl["labels"]["workloads"] - wl["labels"]["with_both"],
+    }
+    return rm
+
+
+def pin_crown(rm: dict, crown: list[tuple], lines: list[dict]) -> None:
+    names = {f"{a} ({e})" for a, e in crown}
+    for r in rm["apps"]:
+        r["crown_jewel"] = r["app"] in names
+    rm["apps"] = rank_apps(rm["apps"])
+    rm["fix_first"] = fix_first(rm, lines, sorted(names))
+    rm["takeaway"] = takeaway(rm)
+
+
 # --------------------------------------------------------------------- outputs
 
 WHY = {
@@ -494,13 +1063,29 @@ WHY = {
 }
 
 
+def directory_warning(l: dict) -> str:
+    parts = [f"{p} ({DIRECTORY_PORTS[int(p.split('/')[0])]}) to {', '.join(apps)}" for p, apps in l["directory_ports"].items()]
+    return ("the deny carries " + "; ".join(parts)
+            + ": denying these from a user or client environment breaks logins; add an allow for the directory servers on these ports above the deny, or drop the ports")
+
+
+def not_admitted_text(l: dict) -> str:
+    na = l["would_have_blocked"].get("allowed_not_admitted", 0)
+    if not na:
+        return ""
+    return (f"; {na} of the allowed connections are admitted by no draft allow rule and the enforcing side ({l.get('enforcing_side', '?')}) "
+            f"is wholly in selective enforcement, which reports everything a deny does not catch as allowed: the deny would catch them without contradicting a rule")
+
+
 def action(l: dict) -> str:
     """One clause for tables: what to do, when."""
     when = "today" if l.get("bucket") == "today" else "this week"
     if l["class"] == "X1":
-        return f"override deny from an IP list of the source to all workloads on {', '.join(l['admin_ports'])}, {when}"
+        if l.get("address_class") != "public":
+            return f"identify the source, then label it or override deny it from an IP list to all workloads on {', '.join(l['admin_ports'])}, {when}"
+        return f"override deny from an IP list of the source to all workloads on {', '.join(l['admin_ports'])}, {when}" + (" after review" if l["ease"] < 4 else "")
     if l["class"] == "X2":
-        return f"deny env={l['src_env']} -> env={l['dst_env']} on {', '.join(l['ports'])}, {when}" + (" after review" if l["ease"] < 4 else "")
+        return f"deny env={l['src_env']} -> env={l['dst_env']} on {', '.join(l['ports'])}, {when}" + (" after review" if l["ease"] < 4 else "") + ("; carve out the directory ports" if l.get("directory_ports") else "")
     return f"selective ringfence RF-{l['app']}-{l['env']}, deny_consumer any, {when}" + ("; then selective enforcement" if "visibility" in l["why"] else "")
 
 
@@ -510,8 +1095,15 @@ def recommendation(l: dict) -> str:
     if l["class"] == "X1":
         r = (f"Draft an override deny from an IP list holding {l['ip']} to all workloads on {', '.join(l['admin_ports'])} "
              f"in {l['ruleset']} ({when}). Override deny on purpose: it must hold even where an allow admits the source.")
+        if l.get("address_class") != "public":
+            r += (" Identify the host first: an internal address the PCE cannot name is usually a scanner, a backup or monitoring host, "
+                  "a jump box or an unlabelled server; label it if it belongs, keep the deny if it does not.")
+        if l["ip_lists"]:
+            r += f" It is on the list{'s' if len(l['ip_lists']) > 1 else ''} {', '.join(l['ip_lists'])}; a rule admits it on purpose, so the list owner confirms first."
         if wb["allowed"] and l["ease"] < 4:
             r += f" {wb['allowed']} allowed connections would stop; confirm admin access from this source may end first."
+        if l.get("admitting_rules"):
+            r += " Admitted today by: " + "; ".join(l["admitting_rules"]) + "."
         return r
     if l["class"] == "X2":
         r = (f"Draft a deny env={l['src_env']} -> env={l['dst_env']} on {', '.join(l['ports'])} in {l['ruleset']} ({when}); "
@@ -519,6 +1111,8 @@ def recommendation(l: dict) -> str:
         if wb["allowed"] and l["ease"] < 4:
             r += (f" {wb['allowed']} allowed connections would stop, admitted by: "
                   + ("; ".join(l.get("admitting_rules") or []) or "no rule naming these envs (a broader rule or an IP list)") + "; confirm first.")
+        if l.get("directory_ports"):
+            r += " Warning: " + directory_warning(l) + "."
         return r
     al = l["allow_list"]
     r = (f"Preview, then draft a selective ringfence RF-{l['app']}-{l['env']} with deny_consumer any ({when}): "
@@ -552,10 +1146,15 @@ def wb_text(m: dict) -> str:
     return f"{m.get('allowed', 0)}/{m.get('potentially_blocked', 0)}/{m.get('blocked', 0)}"
 
 
+def wb_note(m: dict) -> str:
+    na = m.get("allowed_not_admitted", 0)
+    return f"; {na} of the allowed are admitted by no draft rule" if na else ""
+
+
 def line_text(l: dict) -> str:
     radius = {"X1": f"{l.get('peer_workloads', 0)} workloads, {l.get('peers_enforced', 0)} enforced",
               "X2": f"{len(l.get('dst_apps', []))} destination apps"}.get(l["class"], None)
-    wb = f"would have blocked {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked)"
+    wb = f"would have blocked {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked){wb_note(l['would_have_blocked'])}"
     if l["kind"] == "ringfence":
         radius = (f"reaches {l['why']['bridge']['reachable_apps']} apps, " if "bridge" in l["why"] else "") + f"{l['workloads']} workloads"
         wb = f"deny would catch {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked) from sources with no allow rule"
@@ -569,14 +1168,19 @@ def modes_text(modes: dict) -> str:
 
 def details(l: dict) -> list[str]:
     if l["class"] == "X1":
-        return [f"  - override deny on purpose; source {l['ip']}{' ' + l['fqdn'] if l.get('fqdn') else ''} is {l['address_class']}, "
+        return [f"  - override deny on purpose; source {l['ip']}{' ' + l['fqdn'] if l.get('fqdn') else ''} is {l['address_class']}"
+                + ("" if l["address_class"] == "public" else " (identify first)") + ", "
                 f"lists: {', '.join(l['ip_lists']) or 'none'}, profile: {', '.join(l.get('profile') or [])}; allowed into enforced workloads: {l['allowed_into_enforced']}; "
                 f"peer apps: {', '.join(l['peer_apps'][:6])}"
-                + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm admin access from this source may end" if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")]
+                + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm admin access from this source may end" if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")
+                + (f"; admitted by: {'; '.join(l['admitting_rules'])}" if l.get("admitting_rules") else "")
+                + not_admitted_text(l)]
     if l["class"] == "X2":
         return [f"  - ports seen: {', '.join(l['ports_seen'])}; app pairs: " + "; ".join(f"{a['from']} -> {a['to']} {a['policy']} {a['connections']}" for a in l["app_pairs"][:5])
                 + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm they may, admitted by: "
-                   + ("; ".join(l.get("admitting_rules") or []) or "no allow rule found naming these envs (a broader rule or an IP list)") if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")]
+                   + ("; ".join(l.get("admitting_rules") or []) or "no allow rule found naming these envs (a broader rule or an IP list)") if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")
+                + not_admitted_text(l)
+                + (f"; warning: {directory_warning(l)}" if l.get("directory_ports") else "")]
     al = l["allow_list"]
     why = " and ".join(filter(None, [f"bridge reaching {l['why']['bridge']['reachable_apps']} apps" if "bridge" in l["why"] else "",
                                     f"{l['why']['visibility']['workloads_not_enforcing']} workloads not enforcing with {l['why']['visibility']['denied_inbound_connections']} denied inbound connections" if "visibility" in l["why"] else ""]))
@@ -587,17 +1191,58 @@ def details(l: dict) -> list[str]:
             + (f"; scoped rulesets: {', '.join(l['scoped_rulesets'])}" if l["scoped_rulesets"] else "")]
 
 
+def header_notes(p: dict) -> list[str]:
+    """Header lines shared by the plan and the report: caps, the admin-map span, the lateral
+    window, the unknown-endpoint coverage and the labelling readiness."""
+    L = []
+    caps = [k for k, v in p["truncated"].items() if v]
+    L.append("Counts are lower bounds on: " + ", ".join(caps) + "." if caps else "No query hit its cap.")
+    span = p.get("admin_span") or {}
+    if p["truncated"].get("admin_ports") and span.get("start"):
+        L.append(f"The admin-port map hit the 500-flow cap and covers {span['start']} to {span['end']}"
+                 + (f" ({span['days']} day{'s' if span['days'] != 1 else ''} of the {p['window_days']}-day window)" if span.get("days") else "")
+                 + "; X2 lines are a sample of that span.")
+    uc = p.get("unknown_coverage") or {}
+    if uc.get("returned") and uc.get("unknown_endpoints") and uc["returned"] < uc["unknown_endpoints"]:
+        L.append(f"Unknown endpoints: the {uc['returned']} busiest of {uc['unknown_endpoints']} were read, so X1 and X3 counts are lower bounds.")
+    if p.get("lateral_days") and p["lateral_days"] != p["window_days"]:
+        L.append(f"Lateral movement was read over {p['lateral_days']} days, not the {p['window_days']}-day window (the longer query timed out).")
+    r = p["risk_map"]["readiness"]
+    L.append(f"Labelling readiness: {r['verdict']}" + (f", {r['labelled']} of {r['workloads']} workloads carry app and env" if r["workloads"] else "")
+             + ("; " + "; ".join(r["notes"]) if r["notes"] else "") + ".")
+    return L
+
+
+def map_line(rm: dict) -> str:
+    top = ", ".join(r["app"] for r in rm["apps"][:3])
+    s = "Where the risk sits: " + (top if top else "no app could be ranked")
+    if rm["env_matrix"]:
+        m = rm["env_matrix"][0]
+        s += f"; largest crossing {m['from']} to {m['to']}, {m['allowed']:,} allowed connections"
+    if rm["rule_drift"]:
+        s += f"; {len(rm['rule_drift'])} override den{'y' if len(rm['rule_drift']) == 1 else 'ies'} not showing in traffic"
+    return s + "."
+
+
+def baseline_text(bl: dict) -> str:
+    s = (f"Blocked and potentially blocked flows per {bl['bucket']} over {bl['days']} buckets: median {bl['median_nonzero']}, total {bl['total_flows']}"
+         + (" (capped; lower bound)" if bl.get("truncated") else "") + ".")
+    if bl.get("effective_bucket") and bl["effective_bucket"] != bl["bucket"]:
+        s += f" Explorer rows span more than one bucket; the server says the data supports {bl['effective_bucket']} buckets" + (f": {bl['resolution_note']}" if bl.get("resolution_note") else ".")
+    return s
+
+
 def write_plan_md(path: pathlib.Path, p: dict) -> None:
     L = [f"# Rapid risk reduction plan, {p['date']}: {p['window'].get('start') or '?'} to {p['window'].get('end') or '?'}\n"]
     L.append(f"Production environments: {', '.join(p['production_envs']) or 'none identified (pass --prod-env)'}.")
     L.append(f"Crown jewels: {', '.join(f'{a} ({e})' for a, e in p['crown_jewels']) or 'none'} ({p['crown_jewels_source']}).")
-    caps = [k for k, v in p["truncated"].items() if v]
     L.append(f"Inputs read: {', '.join(k for k, v in p['inputs'].items() if v)}; missing: {', '.join(k for k, v in p['inputs'].items() if not v) or 'none'}.")
-    L.append("Counts are lower bounds on: " + ", ".join(caps) + "." if caps else "No query hit its cap.")
+    L += header_notes(p)
     L.append(f"Draft ruleset: `{p['ruleset_name']}`" + (f" (already exists in draft: {', '.join(p['policy']['rrr_rulesets'])})" if p['policy']['rrr_rulesets'] else "") + ". Nothing below is provisioned. Every rule is a draft to review; rollback is deleting it from the draft.")
     b = p["buckets"]
     L.append(f"\n{len(p['lines'])} exposures with a draft fix: {len(b['today'])} to block today, {len(b['week'])} to fence this week, "
-             f"{len(p['crown_jewels'])} isolation runbooks, {len(p['watch'])} to watch.\n")
+             f"{len(p['crown_jewels'])} isolation runbooks, {len(p['watch'])} to watch.")
+    L.append(map_line(p["risk_map"]) + "\n")
     L.append("## 1. Block today")
     for l in b["today"]:
         L.append(f"- {line_text(l)}")
@@ -633,8 +1278,7 @@ def write_plan_md(path: pathlib.Path, p: dict) -> None:
     L.append("\n## 5. Baseline")
     bl = p["baseline"]
     if bl.get("available"):
-        L.append(f"Blocked and potentially blocked flows per {bl['effective_bucket'] or bl['bucket']} over {bl['days']} buckets: median {bl['median_nonzero']}, total {bl['total_flows']}"
-                 + (" (capped; lower bound)" if bl.get("truncated") else "") + ".")
+        L.append(baseline_text(bl))
         if bl.get("caveat"):
             L.append(f"No spike quoted: {bl['caveat']}")
         elif bl.get("worst"):
@@ -675,9 +1319,7 @@ def write_report_md(path: pathlib.Path, p: dict) -> None:
          f"Production environments: {', '.join(p['production_envs']) or 'none identified'}. "
          f"Crown jewels: {', '.join(f'{a} ({e})' for a, e in p['crown_jewels']) or 'none'} ({p['crown_jewels_source']}). "
          f"Draft ruleset `{p['ruleset_name']}`. Nothing in this report is created or provisioned."]
-    caps = [k for k, v in p["truncated"].items() if v]
-    if caps:
-        L.append(f"Counts are lower bounds on: {', '.join(caps)} (a query hit its cap).")
+    L += header_notes(p)
     L.append("\n## 1. Executive summary\n")
     allowed_stop = sum(l["would_have_blocked"].get("allowed", 0) for l in b["today"] + b["week"] if l["kind"] != "ringfence")
     L.append(f"{len(p['lines'])} exposures have a draft fix: {len(b['today'])} can be blocked today with little chance of breaking anything, "
@@ -687,6 +1329,7 @@ def write_report_md(path: pathlib.Path, p: dict) -> None:
     top = sorted(p["lines"], key=lambda l: -l["score"])[:3]
     for l in top:
         L.append(f"- **{l['score']}** {l['class']} {l['title']}: {l['action']}.")
+    L += report_map_section(p["risk_map"])
     L.append("\n## 2. Risk register\n")
     L.append("| # | Risk | Score | Blast radius | Ease | Would have blocked (allowed/pb/blocked) | Recommended action | When |")
     L.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
@@ -701,7 +1344,7 @@ def write_report_md(path: pathlib.Path, p: dict) -> None:
         L.append(f"### {l['score']} · {l['class']} {l['title']}\n")
         L.append(f"**Risk.** {WHY.get(cls, '')}")
         L.append(f"\n**What we saw.** {line_detail(l)}")
-        L.append(f"\n**Evidence.** {'; '.join(l['evidence'])}. Blast radius {l['blast_radius']}, ease {l['ease']}, would have blocked {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked).")
+        L.append(f"\n**Evidence.** {'; '.join(l['evidence'])}. Blast radius {l['blast_radius']}, ease {l['ease']}, would have blocked {wb_text(l['would_have_blocked'])} (allowed/potentially blocked/blocked){wb_note(l['would_have_blocked'])}.")
         L.append(f"\n**Recommendation.** {l['recommendation']}")
         L.append(f"\n**Rollback.** {l['rollback']}.\n")
     L.append("## 4. Observations without a rule\n")
@@ -725,23 +1368,71 @@ def write_report_md(path: pathlib.Path, p: dict) -> None:
     L.append("\n## 6. Baseline and 7-day review\n")
     bl = p["baseline"]
     if bl.get("available"):
-        L.append(f"Blocked and potentially blocked flows per {bl['effective_bucket'] or bl['bucket']} over {bl['days']} buckets: median {bl['median_nonzero']}, total {bl['total_flows']}"
-                 + (" (capped; lower bound)" if bl.get("truncated") else "") + ". "
+        L.append(baseline_text(bl) + " "
                  + (f"No spike quoted: {bl['caveat']}" if bl.get("caveat") else f"Worst spike {bl['worst']['bucket_start']} with {bl['worst']['flows']} flows, {bl['worst']['multiple']}x the median." if bl.get("worst") else "No bucket above 3x the median."))
     else:
         L.append("No timeline saved; run get-traffic-timeline for the baseline.")
     L.append("Re-run the timeline 7 days after provisioning: blocked rows should rise and potentially blocked fall, and nothing else should move. Re-run this skill with the same window; lines whose rule is active should show their traffic as blocked.")
     L.append("\n## 7. Method and semantics\n")
-    L.append("Eight read-only illumio-mcp pulls over one window: workloads, the estate traffic summary, the admin-port flows grouped by app pair and port, lateral-movement paths, unknown endpoints, the identity graph, draft rulesets and the blocked timeline. "
+    L.append("Nine read-only illumio-mcp pulls over one window: workloads, the estate traffic summary, the admin-port flows grouped by app pair and port, lateral-movement paths, unknown endpoints, the identity graph, draft rulesets, the draft-to-active comparison and the blocked timeline. "
              "Override deny is evaluated before allow rules and is used only for unknown admin-port sources and the runbooks. A regular deny catches what no allow admits and needs selective or full enforcement to bite. "
              "A selective ringfence needs its deny rule. Deny rules with a label consumer are enforced on the source workloads; with an IP-list consumer at the destination, which is why deny_consumer any is the safest flavour. "
+             "Selective enforcement reports everything a deny does not catch as allowed, so an allowed connection that no draft allow rule admits counts as deny-safe in the ease score; full enforcement and visibility report allowed only when a rule matched. "
+             "Labels are not assumed complete: workloads without app and env are counted as a readiness gap and kept out of every scoped finding. "
              "Rollback of any draft is deleting it; nothing here is provisioned. Call plans are in call-plans.md, every block marked DO_NOT_CALL.")
     path.write_text("\n".join(L) + "\n")
 
 
+def report_map_section(rm: dict) -> list[str]:
+    """'Where the risk sits', directly after the executive summary: the same figures as the
+    dashboard's Risk map tab and plan.md's map line, read from one risk_map block."""
+    h, r = rm["headline"], rm["readiness"]
+    L = ["\n## 1a. Where the risk sits\n", rm["takeaway"], ""]
+    L.append(f"**Readiness.** {r['verdict']}" + (f": {r['labelled']} of {r['workloads']} workloads carry app and env labels" if r["workloads"] else "")
+             + ("; " + "; ".join(r["notes"]) if r["notes"] else "") + ".")
+    L.append(f"\n**Headline.** {h['workloads']} workloads: {h['full_enforcement']} in full enforcement, {h['selective']} selective, {h['not_enforcing']} not enforcing. "
+             f"{h['unmanaged_admin_sources']} unmanaged sources on admin ports" + (f" ({h['unmanaged_admin_internal']} internal, {h['unmanaged_admin_public']} public)" if h["unmanaged_admin_public"] else (" (all internal)" if h["unmanaged_admin_sources"] else "")) + ". "
+             + (f"{h['wide_reach_apps']} of {h['apps_in_graph']} apps reach at least three quarters of the estate" + (" (the reach list is capped at 20, so a lower bound)" if h.get("wide_reach_lower_bound") else "") + f", over {h['lateral_days']} days. " if h.get("wide_reach_apps") is not None else "Reach not available (no lateral-movement result). ")
+             + f"{h['override_denies_not_showing']} override denies do not show in traffic, {h['override_denies_unchecked']} could not be checked.")
+    L.append("\n**Apps, ranked.** Measures over the window; the map rank score is the sum of the percentile bands of the six measures (0 to 24) and is not the plan score (blast radius x ease)."
+             + (f" {rm['apps_without_env_excluded']} workloads without app or env are outside the grid." if rm.get("apps_without_env_excluded") else ""))
+    if rm["apps"]:
+        L.append("\n| App | Workloads | Unmanaged inbound | Unmanaged admin sources | Cross-env connections | Cross-env apps | Wide-reach accounts | Not enforcing | Map rank score |")
+        L.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        for a in rm["apps"][:12]:
+            L.append(f"| {a['app']}{' (crown jewel)' if a['crown_jewel'] else ''} | {a['workloads']} | {a['unmanaged_inbound']:,} | {a['unmanaged_admin_sources']} | {a['cross_env_connections']:,} | {a['cross_env_apps']} | {a['wide_reach_accounts']} | {a['workloads_not_enforcing']} | {a['risk_rank_score']} |")
+    else:
+        L.append("\nNo app could be ranked" + ("" if rm["inputs"]["summary"] else " (no estate summary)") + ".")
+    L.append("\n**Traffic between environments.** Allowed connections, from row to column, whole window.")
+    if rm["env_matrix"]:
+        L.append("\n| From | To | Allowed | Potentially blocked | Blocked |\n| --- | --- | --- | --- | --- |")
+        for m in rm["env_matrix"][:12]:
+            L.append(f"| {m['from']} | {m['to']} | {m['allowed']:,} | {m['potentially_blocked']:,} | {m['blocked']:,} |")
+    else:
+        L.append("\nNo traffic between environments" + ("" if rm["inputs"]["summary"] else " (no estate summary)") + ".")
+    L.append("\n**Rules not showing in traffic.** Enabled override denies whose named traffic is reported allowed. A provisioned override deny on an enforcing workload reports blocked, so check the pending changes, the rule's update time and the data before adding rules."
+             + (f" Draft to active: {rm['draft_active']['pending']} pending change{'s' if rm['draft_active']['pending'] != 1 else ''}." if rm["draft_active"].get("available") else " Rules were read as draft; compare-draft-active was not run.")
+             + f" {h['override_denies_unchecked']} override denies use shapes this check does not cover (role labels, named services).")
+    if rm["rule_drift"]:
+        L.append("\n| Ruleset | Should stop | Reported allowed | Basis | Enforced on | Rule updated |\n| --- | --- | --- | --- | --- | --- |")
+        for d in rm["rule_drift"]:
+            L.append(f"| {d['ruleset']} | {', '.join(d['consumers'])} -> {', '.join(d['providers'])} on {', '.join(d['services'])} | {d['allowed_connections']:,} | {d['basis']} | {d['enforced_on']} | {str(d['rule_updated_at'] or '?')[:10]}{' (changed inside the window)' if d['changed_in_window'] else ''} |")
+    elif rm["inputs"]["rulesets"]:
+        L.append("\nNone found.")
+    else:
+        L.append("\nNot checked: no rulesets saved.")
+    L.append("\n**Fix first.**\n")
+    for i, s in enumerate(rm["fix_first"], 1):
+        L.append(f"{i}. {s}")
+    if not rm["fix_first"]:
+        L.append("Nothing stands out.")
+    return L
+
+
 def dashboard_data(p: dict) -> str:
     def wb(m):
-        return {"allowed": m.get("allowed", 0), "potentiallyBlocked": m.get("potentially_blocked", 0), "blocked": m.get("blocked", 0)}
+        return {"allowed": m.get("allowed", 0), "potentiallyBlocked": m.get("potentially_blocked", 0), "blocked": m.get("blocked", 0),
+                "allowedNoRule": m.get("allowed_not_admitted", 0)}
     def radius(l):
         if l["kind"] == "ringfence":
             return (f"reaches {l['why']['bridge']['reachable_apps']} apps, " if "bridge" in l["why"] else "") + f"{l['workloads']} workloads"
@@ -778,16 +1469,42 @@ def dashboard_data(p: dict) -> str:
             "unknownAdminSources": sum(1 for l in p["lines"] if l["class"] == "X1"), "envCrossings": sum(1 for l in p["lines"] if l["class"] == "X2"),
             "bridges": sum(1 for l in p["lines"] if "X4" in l["class"])}
     scope = {"date": p["date"], "windowStart": str(p["window"].get("start") or "?")[:10], "windowEnd": str(p["window"].get("end") or "?")[:10], "windowDays": p["window_days"],
+             "lateralDays": p.get("lateral_days"), "adminSpan": p.get("admin_span") or {},
              "productionEnvs": p["production_envs"], "crownJewels": [f"{a} ({e})" for a, e in p["crown_jewels"]], "crownJewelsSource": p["crown_jewels_source"],
-             "rulesetName": p["ruleset_name"], "lowerBounds": [k for k, v in p["truncated"].items() if v], "missingInputs": [k for k, v in p["inputs"].items() if not v],
-             "policyVersion": p["policy"].get("policy_version")}
-    baseline = {"available": bool(b.get("available")), "bucket": b.get("effective_bucket") or b.get("bucket") or "1d", "days": b.get("days", 0), "median": b.get("median_nonzero", 0),
+             "rulesetName": p["ruleset_name"], "lowerBounds": [k for k, v in p["truncated"].items() if v], "missingInputs": [k for k, v in p["inputs"].items() if not v and k != "draft_active"],
+             "policyVersion": p["policy"].get("policy_version"), "headerNotes": header_notes(p)}
+    baseline = {"available": bool(b.get("available")), "bucket": b.get("bucket") or "1d", "effectiveBucket": b.get("effective_bucket"), "resolutionNote": b.get("resolution_note"),
+                "days": b.get("days", 0), "median": b.get("median_nonzero", 0),
                 "total": b.get("total_flows", 0), "worst": ({"bucketStart": b["worst"]["bucket_start"], "flows": b["worst"]["flows"], "multiple": b["worst"]["multiple"]} if b.get("worst") else None),
                 "caveat": b.get("caveat"), "truncated": bool(b.get("truncated")), "threshold": b.get("threshold"), "spikeBuckets": [{"bucketStart": x["bucket_start"]} for x in (b.get("spike_buckets") or [])] if not b.get("caveat") else [],
                 "series": series}
     plans = [{"for": c["for"], "tool": c.get("tool"), "runbook": c.get("runbook"), "json": json.dumps(c, indent=1)} for c in p["call_plans"]]
+    rm = p["risk_map"]
+    h, r = rm["headline"], rm["readiness"]
+    risk_map = {
+        "takeaway": rm["takeaway"],
+        "readiness": {"verdict": r["verdict"], "workloads": r["workloads"], "labelled": r["labelled"], "unlabelled": r["unlabelled"],
+                      "withApp": r["with_app"], "withEnv": r["with_env"], "labelColumns": r["label_columns"], "notes": r["notes"], "examples": r["unlabelled_examples"]},
+        "headline": {"workloads": h["workloads"], "fullEnforcement": h["full_enforcement"], "selective": h["selective"], "notEnforcing": h["not_enforcing"],
+                     "unmanagedAdminSources": h["unmanaged_admin_sources"], "unmanagedAdminInternal": h["unmanaged_admin_internal"], "unmanagedAdminPublic": h["unmanaged_admin_public"],
+                     "appsInGraph": h["apps_in_graph"], "wideReachApps": h["wide_reach_apps"], "wideReachLowerBound": h["wide_reach_lower_bound"], "lateralDays": h["lateral_days"],
+                     "overrideDeniesNotShowing": h["override_denies_not_showing"], "overrideDeniesUnchecked": h["override_denies_unchecked"]},
+        "apps": [{"app": a["app"], "workloads": a["workloads"], "crownJewel": a["crown_jewel"], "publicAdminSources": a["public_admin_sources"],
+                  "values": {"unmanagedInbound": a["unmanaged_inbound"], "unmanagedAdminSources": a["unmanaged_admin_sources"], "crossEnvConnections": a["cross_env_connections"],
+                             "crossEnvApps": a["cross_env_apps"], "wideReachAccounts": a["wide_reach_accounts"], "workloadsNotEnforcing": a["workloads_not_enforcing"]},
+                  "bands": {"unmanagedInbound": a["bands"]["unmanaged_inbound"], "unmanagedAdminSources": a["bands"]["unmanaged_admin_sources"], "crossEnvConnections": a["bands"]["cross_env_connections"],
+                            "crossEnvApps": a["bands"]["cross_env_apps"], "wideReachAccounts": a["bands"]["wide_reach_accounts"], "workloadsNotEnforcing": a["bands"]["workloads_not_enforcing"]}}
+                 for a in rm["apps"][:12]],
+        "appsTotal": len(rm["apps"]), "appsExcluded": rm.get("apps_without_env_excluded", 0),
+        "envMatrix": [{"from": m["from"], "to": m["to"], "allowed": m["allowed"], "potentiallyBlocked": m["potentially_blocked"], "blocked": m["blocked"]} for m in rm["env_matrix"]],
+        "ruleDrift": [{"ruleset": d["ruleset"], "shouldStop": f"{', '.join(d['consumers'])} -> {', '.join(d['providers'])} on {', '.join(d['services'])}", "allowed": d["allowed_connections"],
+                       "basis": d["basis"], "enforcedOn": d["enforced_on"], "updatedAt": str(d["rule_updated_at"] or "?")[:10], "changedInWindow": d["changed_in_window"]} for d in rm["rule_drift"]],
+        "draftActive": {"available": bool(rm["draft_active"].get("available")), "pending": rm["draft_active"].get("pending", 0)},
+        "fixFirst": rm["fix_first"],
+        "inputs": rm["inputs"],
+    }
     j = lambda v: json.dumps(v, indent=None, default=str)
-    return "\n".join([f"const scope = {j(scope)};", f"const kpis = {j(kpis)};", f"const lines = {j(lines)};", f"const runbooks = {j(runbooks)};",
+    return "\n".join([f"const scope = {j(scope)};", f"const kpis = {j(kpis)};", f"const riskMap = {j(risk_map)};", f"const lines = {j(lines)};", f"const runbooks = {j(runbooks)};",
                        f"const watch = {j(watch)};", f"const baseline = {j(baseline)};", f"const callPlans = {j(plans)};"])
 
 
@@ -821,44 +1538,58 @@ def main(argv=None) -> int:
     ap.add_argument("--prod-env", action="append", default=[], help="env label value treated as production (repeatable; default: values containing 'prod')")
     ap.add_argument("--crown", action="append", default=[], help="crown-jewel app as app=<name>,env=<env> (repeatable)")
     ap.add_argument("--window-days", type=int, default=30)
+    ap.add_argument("--lateral-days", type=int, default=None, help="window of detect-lateral-movement-paths when it had to be shorter (default: the result's lookback_days)")
     ap.add_argument("--date", default=date.today().isoformat(), help="YYYY-MM-DD used in the draft ruleset name")
     ap.add_argument("--template", type=pathlib.Path, default=None, help="dashboard template (default: ../references/dashboard-example.jsx)")
     a = ap.parse_args(argv)
 
-    names = ("workloads", "summary", "admin_ports", "lateral", "unknown", "identities", "rulesets", "timeline")
+    names = ("workloads", "summary", "admin_ports", "lateral", "unknown", "identities", "rulesets", "timeline", "draft_active")
     files = {n: a.scratch / f"{n}.json" for n in names}
     data = {n: load(f) for n, f in files.items()}
     if data["workloads"] is None:
         sys.exit(f"{files['workloads']} is required (get-workloads, compact, unfiltered)")
 
     cols = (data["workloads"] or {}).get("columns") or []
-    if cols and not {"app", "env"} <= set(cols):
-        sys.exit("workloads.json has no app/env label columns; X2, X4, X5 and the ringfence allow lists need app and env labels")
-    wl = workload_index(split_rows(data["workloads"]))
+    has_labels = {"app", "env"} <= set(cols)
+    wl = workload_index(split_rows(data["workloads"]) if has_labels else [{**r, "app": None, "env": None} for r in split_rows(data["workloads"])], has_labels)
     prod = pick_prod_envs(a.prod_env, wl["envs"])
     policy = existing_policy(data["rulesets"])
-    x1 = x1_unknown_admin(data["unknown"], policy)
-    x2 = x2_env_crossings(data["admin_ports"], prod, data["rulesets"])
+    x1 = x1_unknown_admin(data["unknown"], policy, data["rulesets"], wl)
+    x2 = x2_env_crossings(data["admin_ports"], prod, data["rulesets"], wl)
     fences = ringfence_lines(data["lateral"], wl, data["summary"], policy)
     x3 = x3_public_sources(data["unknown"], {l["ip"] for l in x1})
     x6 = x6_identities(data["identities"])
-    jewels, jewels_src = crown_jewels([parse_pair(c) for c in a.crown], fences, prod)
 
     lines = sorted(x1 + x2 + fences, key=lambda l: -l["score"])
-    today = [l for l in lines if l["kind"] in ("deny", "override_deny") and l["ease"] >= 4]
+    # Block today: denies with ease 4 or more, except internal unknown sources, which are
+    # identified first (usually a scanner, a backup host or an unlabelled server).
+    today = [l for l in lines if l["kind"] in ("deny", "override_deny") and l["ease"] >= 4
+             and not (l["class"] == "X1" and l.get("address_class") != "public")]
     week = [l for l in lines if l not in today]
+    for l in lines:
+        l["bucket"] = "today" if l in today else "week"
+    window = (data["summary"] or data["unknown"] or data["timeline"] or {}).get("window") or {}
+    lateral_days = a.lateral_days or (data["lateral"] or {}).get("lookback_days") or a.window_days
+    rm = risk_map(data, wl, lines, str(window.get("start") or "")[:10] or None, lateral_days)
+    jewels, jewels_src = crown_jewels([parse_pair(c) for c in a.crown], fences, prod, rm["apps"])
+    pin_crown(rm, jewels, lines)
+
     wl_env = data["workloads"] or {}
+    unk_totals = (data["unknown"] or {}).get("totals") or {}
+    span = admin_span(data["admin_ports"])
     truncated = {
         "workloads": bool(wl_env.get("truncated")) or wl_env.get("total", 0) >= 10000,
         "summary": bool(((data["summary"] or {}).get("totals") or {}).get("truncated")),
         "admin_ports": bool((data["admin_ports"] or {}).get("truncated")) or int((data["admin_ports"] or {}).get("total_pce_flows") or 0) >= 500,
-        "unknown": bool(((data["unknown"] or {}).get("totals") or {}).get("flows_truncated")),
+        "unknown": bool(unk_totals.get("flows_truncated")) or (int(unk_totals.get("returned") or 0) < int(unk_totals.get("unknown_endpoints") or 0)),
         "timeline": bool(((data["timeline"] or {}).get("totals") or {}).get("flows_truncated")),
     }
     plan = {
-        "date": a.date, "ruleset_name": f"RRR-{a.date}", "window_days": a.window_days,
-        "window": (data["summary"] or data["unknown"] or data["timeline"] or {}).get("window") or {},
+        "date": a.date, "ruleset_name": f"RRR-{a.date}", "window_days": a.window_days, "lateral_days": lateral_days,
+        "window": window, "admin_span": span,
         "inputs": {n: f.exists() for n, f in files.items()}, "truncated": truncated,
+        "unknown_coverage": {"returned": unk_totals.get("returned"), "unknown_endpoints": unk_totals.get("unknown_endpoints")},
+        "default_ip_lists": unk_totals.get("default_ip_lists") or [ANY_LIST],
         "production_envs": prod, "crown_jewels": jewels, "crown_jewels_source": jewels_src,
         "crown_jewel_workloads": {f"{a} ({e})": wl["apps"].get((a, e), {}).get("workloads", 0) for a, e in jewels},
         "policy": {"policy_version": policy["policy_version"], "rrr_rulesets": policy["rrr_rulesets"],
@@ -866,11 +1597,11 @@ def main(argv=None) -> int:
                    "scoped": {f"{a} ({e})": v for (a, e), v in policy["scoped"].items()},
                    "fenced": sorted(f"{a} ({e})" for a, e in policy["fenced"])},
         "lines": lines, "buckets": {"today": today, "week": week}, "watch": x3 + x6,
+        "risk_map": rm,
         "baseline": baseline(data["timeline"]),
         "_timeline_series": (data["timeline"] or {}).get("series") or [],
     }
     for l in lines:
-        l["bucket"] = "today" if l in today else "week"
         l["ruleset"] = plan["ruleset_name"]
         l["recommendation"] = recommendation(l)
         l["action"] = action(l)
