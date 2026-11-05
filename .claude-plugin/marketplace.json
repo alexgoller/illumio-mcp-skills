@@ -1,0 +1,27 @@
+{
+  "name": "illumio-mcp-skills",
+  "owner": {
+    "name": "Alex Goller"
+  },
+  "metadata": {
+    "description": "Agent Skills for Illumio Segmentation on top of the illumio-mcp server"
+  },
+  "plugins": [
+    {
+      "name": "illumio",
+      "description": "Illumio PCE skills: app profile, rapid risk reduction, unknown endpoints, compliance evidence, agentic AI risk, PCE assessment, daily assessment, security dashboard. Needs the illumio-mcp MCP server.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./illumio-agentic-ai-risk-assessment",
+        "./illumio-app-profile",
+        "./illumio-compliance-evidence",
+        "./illumio-daily-assessment-dashboard",
+        "./illumio-pce-security-assessment",
+        "./illumio-rapid-risk-reduction",
+        "./illumio-security-dashboard-skill",
+        "./illumio-unknown-endpoints"
+      ]
+    }
+  ]
+}
