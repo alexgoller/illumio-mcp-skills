@@ -2,14 +2,17 @@
 
 Skills building on the Illumio MCP server for Illumio Segmentation.
 
-## Installing a skill
+## Installing the skills
 
-Every skill ships as one zip, `<skill-name>.zip`, holding a single folder with `SKILL.md` inside. Get it from the latest [GitHub release](https://github.com/alexgoller/illumio-mcp-skills/releases), or build it locally with `./package.sh` (writes `dist/`).
+**Claude Code:** the repo is a plugin marketplace; one command installs all eight skills as `/illumio:<name>`:
 
-- **claude.ai**: Settings > Capabilities > Skills > upload the zip.
-- **Claude Code**: `claude --plugin-dir /path/to/<skill-name>.zip`, or unzip it into your skills directory.
+```
+/plugin install illumio --marketplace alexgoller/illumio-mcp-skills
+```
 
-All skills need the [illumio-mcp](https://github.com/alexgoller/illumio-mcp-server) MCP server connected to a PCE.
+**claude.ai and Claude Desktop:** every skill also ships as one zip, `<skill-name>.zip`, from the latest [GitHub release](https://github.com/alexgoller/illumio-mcp-skills/releases) (or `./package.sh`, which writes `dist/`); upload it under Customize > Skills.
+
+All skills need the [illumio-mcp](https://github.com/alexgoller/illumio-mcp-server) MCP server connected to a PCE. [INSTALL.md](INSTALL.md) has the full guide: connecting the server, the plugin, skill folders, one-session loads, Claude Desktop, claude.ai, the document skills, and troubleshooting.
 
 ## Releasing
 
@@ -18,6 +21,8 @@ The `Package skills` workflow runs `package.sh` on every push and pull request a
 ```
 git tag v1.0.0 && git push origin v1.0.0
 ```
+
+The Claude Code plugin (`.claude-plugin/marketplace.json`) reads the skills straight from the repo and carries no version of its own, so a release needs no change there; `claude plugin update illumio@illumio-mcp-skills` pulls main. `claude plugin validate .` checks the manifest.
 
 ## Conventions
 

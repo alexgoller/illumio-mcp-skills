@@ -83,3 +83,13 @@
   unchecked.
 - A doc patch script that writes one file before asserting the next pair leaves the repo
   half-patched; assert every pair first, or make each step idempotent.
+
+## 2026-11-05 install docs
+- Test the install, do not transcribe it. The README said `--plugin-dir x.zip`; it works but
+  yields a session-only skill named `x:x`, and a folder of zips loads nothing. One
+  `.claude-plugin/marketplace.json` gives the standard route and `claude plugin validate .`
+  tells you the exact README line to add.
+- In `.claude/skills/` the folder name, not the frontmatter `name`, is what the `/` menu
+  shows; two repo directories differ from their skill names, so install from the zips.
+- Menu paths in the web and Desktop apps cannot be tested from the CLI; cite the help
+  centre article and say so in the doc.
