@@ -265,7 +265,7 @@ Before state on demo100 (current main): 107 lines (94 X1, 13 X2), 0 today, 107 w
 - [x] Labelling never assumed: readiness verdict (ready / partial / not ready) in every header,
       the script no longer exits without app/env columns, "label first" leads when unlabelled
       workloads are the majority
-- [ ] PR; server issues filed
+- [x] PR #16; server issues illumio-mcp-server #70 to #75 filed
 
 ## Review
 
