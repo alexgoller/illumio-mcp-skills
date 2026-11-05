@@ -27,15 +27,18 @@ exposure: action".
 Directly after the executive summary, from `plan.json["risk_map"]`, the
 same figures as the dashboard's Risk map tab and the plan's map line:
 the takeaway sentence; **Readiness** (verdict, labelled of total, what
-sits outside every scoped fix); **Headline** (enforcement modes,
+sits outside every scoped fix); **Policy read** (the view; in the draft
+view the delta table of rulesets and rules new, changed, removed, and
+the exposures drafted, provisioned but reported allowed, nothing
+drafted); **Headline** (enforcement modes,
 unmanaged admin-port sources with the public split only when public
 exist, apps reaching most of the estate over the lateral window,
 override denies not showing and unchecked); **Apps, ranked** (the top
 12 with the six measures and the map rank score, stated as not the
 plan score); **Traffic between environments** (allowed, potentially
 blocked, blocked per pair); **Rules not showing in traffic** (ruleset,
-should stop, reported allowed, basis, enforced on, rule updated, the
-pending-changes count or that compare-draft-active was not run);
+should stop, reported allowed, basis, enforced on, rule updated; the
+override denies that exist only in the draft are counted, not listed);
 **Fix first** (the generated list). Neutral wording throughout.
 
 ## 2. Risk register
@@ -84,8 +87,10 @@ window; blocked should rise and potentially blocked fall.
 
 ## 7. Method and semantics
 
-The nine pulls, the scoring reference, and the Illumio sentences:
-override deny beats every allow and is for incidents; a selective
+The nine pulls (ten in the draft view), the scoring reference, and the
+Illumio sentences: scores use the provisioned rules, the policy the
+reported decisions come from; override deny beats every allow and is
+for incidents; a selective
 ringfence needs its deny rule; deny rules are enforced on the consumer
 side with a label consumer and at the destination with an IP-list
 consumer; selective enforcement reports everything a deny does not

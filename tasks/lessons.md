@@ -72,3 +72,14 @@
   appears only when present, then test with that input removed.
 - zsh: an unquoted variable is not word-split (`$P` with several flags failed argparse);
   use an array. `cp` is aliased interactive; use `command cp -f` in scripts.
+
+## 2026-11-05 policy views
+- Score against the policy the data was decided by. Reported policy decisions come from
+  the provisioned policy, so reading the draft and explaining "allowed" with draft rules
+  mixes two worlds; the draft is only for "what is already waiting".
+- A "covers it" check needs precision, not possibility. The first cover rule accepted any
+  label key and any named service and marked every exposure as already covered; require
+  the exact dimension (env label or all workloads) and treat unresolvable services as
+  unchecked.
+- A doc patch script that writes one file before asserting the next pair leaves the repo
+  half-patched; assert every pair first, or make each step idempotent.

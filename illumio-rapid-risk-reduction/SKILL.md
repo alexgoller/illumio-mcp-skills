@@ -1,6 +1,6 @@
 ---
 name: illumio-rapid-risk-reduction
-description: "Use when the user asks what they can block or fence now with the least chance of breaking something on an Illumio PCE, or where the risk sits: rapid risk reduction, quick wins, what can we block today, ransomware quick wins, what to fence first, 24-hour or 7-day plan, risk map. Triages the estate with illumio-mcp tools (unknown admin-port sources, environment-crossing admin ports, internet-exposed listeners, lateral-movement bridges, non-enforcing apps, wide-reach identities), checks labelling readiness, ranks each exposure by blast radius x ease, and produces a risk map (ranked apps, crossings, rules not showing in traffic, fix first), a one-page plan, a risk report and a React dashboard, all draft-only: override deny and deny rules, selective ringfences, an isolation runbook per crown-jewel app, each with its rollback. Never provisions. Not for one app, audit evidence or estate reports (illumio-app-profile, illumio-compliance-evidence, illumio-pce-assessment). Requires illumio-mcp-server 0.13.1 or later."
+description: "Use when the user asks what they can block or fence now with the least chance of breaking something on an Illumio PCE, or where the risk sits: rapid risk reduction, quick wins, what can we block today, what to fence first, 24-hour or 7-day plan, risk map. Triages the estate with illumio-mcp tools (unknown admin-port sources, environment crossings, internet-exposed listeners, lateral-movement bridges, non-enforcing apps, wide-reach identities), checks labelling readiness, ranks each exposure by blast radius x ease, and produces a risk map (ranked apps, crossings, rules not showing in traffic, fix first), a one-page plan, a risk report and a React dashboard, all draft-only (denies, selective ringfences, isolation runbooks, each with its rollback), scored against the provisioned policy, plus a draft view: what is already drafted, what is left. Never provisions. Not for one app, audit evidence or estate reports (app-profile, compliance-evidence, pce-assessment). Requires illumio-mcp-server 0.13.1 or later."
 ---
 
 # Illumio Rapid Risk Reduction
@@ -33,6 +33,17 @@ every header, and when no workload is labelled the plan leads with
 "label first" and keeps only the classes that need no label (unknown
 admin-port sources, public sources, identities, the baseline).
 
+**Two policy views.** The **provisioned** view (default) reads the
+active rulesets only: what the PCE enforces today, the policy the
+reported decisions in the traffic come from. The **draft** view reads
+the draft as well and shows the delta between what exists and what is
+left to do: the rulesets and rules the draft adds, changes or removes,
+and for every exposure whether a provisioned deny already names it (yet
+it reports allowed), a draft deny or ringfence already covers it (the
+work left is to provision) or nothing does (the work left is to draft).
+Scores, admitting rules and "allowed, no rule" use the provisioned rules
+in both views.
+
 ## Constraints
 
 - **Read-only.** Never call `provision-policy`, `ringfence-batch`,
@@ -43,11 +54,13 @@ admin-port sources, public sources, identities, the baseline).
   with `for`, `tool`, `DO_NOT_CALL` and `_notes` stripped so what is left
   is the tool's input, and say that this skill does not execute writes:
   they can ask for the call outside this skill or use the PCE UI.
-- **Gentle on the PCE.** Nine data pulls plus the connection check:
+- **Gentle on the PCE.** Nine data pulls plus the connection check (ten
+  in the draft view):
   one traffic summary and one admin-port flow query over the window, one
   lateral-movement pull, one
   `find-unknown-endpoints` (three requests inside), one identity graph,
-  one timeline, one workload pull, one ruleset pull, one draft-to-active
+  one timeline, one workload pull, one ruleset pull of the provisioned
+  policy (plus one of the draft in the draft view), one draft-to-active
   comparison. Reuse every result; do not re-query per app. Every pull
   that takes a window uses the same one (`start_date` to `end_date`, or
   `lookback_days` equal to its span, with `end_date` today), except the
@@ -62,13 +75,15 @@ admin-port sources, public sources, identities, the baseline).
   enforcement reports everything a deny does not catch as `allowed`,
   whether or not an allow rule exists (full enforcement and visibility
   report `allowed` only when a rule matched). The script therefore reads
-  the draft rules: allowed traffic that no allow rule admits, on an
+  the provisioned rules: allowed traffic that no allow rule admits, on an
   enforcing side wholly in selective, counts as deny-safe in the ease
   score and is shown as "allowed, no rule".
 - **Ask one question up front** (Step 0) covering: window (default 30
   days), which `env` values are production (default: values containing
   `prod`), crown-jewel apps as `app (env)` (optional; default: the three
-  production bridge apps with the largest reach), and output (default:
+  production bridge apps with the largest reach), the policy view
+  (default: provisioned only; "provisioned and draft" adds what is
+  already drafted and what is left to do), and output (default:
   the plan in chat plus the dashboard artifact; the report on request,
   as markdown, Claude Doc or .docx). Ask nothing else; the user answers
   with their own label values, and the plan's header states what was
@@ -94,8 +109,8 @@ the script reads them from there.
 ### Step 0: Ask, then connect
 
 Ask the one question (window, production environments, crown jewels,
-output format) in a single message and take the defaults for anything
-left blank. Then:
+policy view, output format) in a single message and take the defaults
+for anything left blank. Then:
 
 ```
 illumio-mcp:check-pce-connection
@@ -247,29 +262,45 @@ carries `note` (no flow has a user), X6 is empty; say so.
 
 ```
 illumio-mcp:get-rulesets
+  pversion: "active"
+```
+
+Unfiltered, saved as `scratch/rulesets.json`: the **provisioned**
+policy, read in both views. Costs one extra request per ruleset for its
+deny rules; run it once. The script refuses a draft pull in this file.
+It uses it to say which apps already have a scoped ruleset (ease +1),
+which are already fenced (a scoped ruleset with a deny to all
+workloads), which allow rules could admit an environment crossing or an
+unknown source (honouring ruleset scope and `unscoped_consumers`; a
+named service cannot be resolved and is marked), which enabled override
+denies name traffic that is reported allowed (the risk map's "rules not
+showing in traffic"), which provisioned denies already name an exposure
+that still reports allowed, and whether an `RRR-` ruleset already
+exists (then the deny-rule call plans target it instead of creating
+one).
+
+```
+illumio-mcp:get-rulesets        (draft view only)
   pversion: "draft"
 ```
 
-Unfiltered, saved as `scratch/rulesets.json`. Costs one extra request
-per ruleset for its deny rules; run it once. The script uses it to say
-which apps already have a scoped ruleset (ease +1), which are already
-fenced (a scoped ruleset with a deny to all workloads), which allow rules
-could admit an environment crossing or an unknown source (honouring
-ruleset scope and `unscoped_consumers`; a named service cannot be
-resolved and is marked), which enabled override denies name traffic
-that is reported allowed (the risk map's "rules not showing in
-traffic"), and whether an `RRR-` ruleset already exists (then the
-deny-rule call plans target it instead of creating one).
+Unfiltered, saved as `scratch/rulesets_draft.json`, only when the user
+chose the draft view. The script diffs it against the provisioned pull
+by href (rulesets and rules new, changed, removed) and marks every
+exposure a draft deny or ringfence already covers as "drafted": the work
+left is to provision, not to draft another. It never scores against the
+draft.
 
 ```
 illumio-mcp:compare-draft-active
 ```
 
-Saved as `scratch/draft_active.json`. Rulesets are read as draft; this
-says whether the draft is what is active (`status: in_sync`) or how many
-changes are pending (`total_pending_changes`; the lists may be empty).
-The risk map shows the count beside the rules that do not show in
-traffic. The script tolerates the file being missing.
+Saved as `scratch/draft_active.json`, both views. Says whether the
+draft is what is active (`status: in_sync`) or how many changes are
+pending (`total_pending_changes`; the lists may be empty). In the
+provisioned view the header says the pending changes were not read; in
+the draft view the count sits beside the delta. The script tolerates
+the file being missing.
 
 ```
 illumio-mcp:get-traffic-timeline
@@ -291,7 +322,8 @@ python3 <skill dir>/scripts/triage.py \
   --window-days 30 --date YYYY-MM-DD \
   --prod-env prod --prod-env production \
   --crown app=pay,env=prod \
-  --lateral-days 7
+  --lateral-days 7 \
+  --policy provisioned
 ```
 
 Use absolute paths: the skill directory for the script, the session's
@@ -302,7 +334,11 @@ question in Step 0; omit `--prod-env` to use every `env` value containing
 `prod`, omit `--crown` to default to the three production bridge apps with
 the largest reach, or, on a flat network with no bridge, the three
 production apps ranked highest on the risk map (the header says which).
-`--lateral-days` is only for the Step 3 fallback. A crown jewel with no
+`--lateral-days` is only for the Step 3 fallback. `--policy` is
+`provisioned` (default) or `draft`; `draft` needs
+`rulesets_draft.json` and adds `policy_delta` to `plan.json`, a
+`cover` and `policy_state` (`drafted`, `provisioned`, `none`) to every
+line, and the policy line to every header. A crown jewel with no
 workloads in the inventory still gets its runbook, flagged "not found,
 check the label values". Writes `plan.json` (every line with its
 evidence, scores, recommendation and call plans, plus the `risk_map`
@@ -318,9 +354,11 @@ input empties its exposure class, it does not invent one.
 ### Step 8: Present
 
 - **Lead with the map.** Whatever the format, the first thing the user
-  reads is the readiness verdict and the fix-first list from
-  `plan.json["risk_map"]`: where the risk sits, in five sentences at
-  most, generated from the evidence (no hand-picked apps). Public
+  reads is the readiness verdict, the policy line (what was read; in the
+  draft view what is already drafted, what is provisioned but still
+  reports allowed, and what is left to draft) and the fix-first list
+  from `plan.json["risk_map"]`: where the risk sits, in five sentences
+  at most, generated from the evidence (no hand-picked apps). Public
   sources appear only when they exist; on a normal enterprise estate the
   ranking is driven by unmanaged internal hosts, environment crossings,
   wide-reach accounts and workloads not enforcing.
@@ -351,8 +389,12 @@ Kerberos, LDAP or SMB names the directory servers and its carve-out;
 every runbook ends in `provision-policy` with its undo; no spike is
 quoted that carried a caveat; and every result's cap flag is false, or
 the plan header names the counts that are lower bounds and the span the
-admin map covers. The header states the labelling readiness and, when
-the lateral pull used a shorter window, says so. The risk map's
+admin map covers. The header states the labelling readiness, the policy view (and in the
+draft view the delta and the three exposure counts, equal in `plan.md`,
+`report.md` and the dashboard's policy tiles) and, when the lateral
+pull used a shorter window, says so; `rulesets.json` is the active
+pull (the script refuses a draft there), and a line marked "drafted"
+says "provision", never "draft another". The risk map's
 headline, ranked apps, largest crossing and drift rows are identical in
 `plan.md`, `report.md` and the dashboard (one `risk_map` block); the
 fix-first list names no app that the evidence does not; the word
@@ -396,6 +438,13 @@ holds no `create-*`, `update-*`, `delete-*`, `provision-policy` or
   rule's update time and the data decide why.
 - Leading with public sources. They are a footnote that appears only
   when they exist; seeded demo traffic makes them look like the story.
+- Scoring against the draft. The reported decisions come from the
+  provisioned policy; the draft only says what is already waiting, so a
+  draft-only override deny is "drafted, not provisioned", never "not
+  showing in traffic".
+- Proposing a rule the draft already holds. In the draft view the line
+  says "provision the drafted deny in <ruleset>" and the call plan notes
+  carry `already_covered`.
 
 ## Older servers
 
@@ -420,5 +469,8 @@ the admitting-rule and drift checks exact: #72.
 workloads and caps reach at 20 apps without a total: #73.
 `find-unknown-endpoints` has no flag for the `top_n` cut: #74.
 `compare-draft-active` changes shape when in sync, and grouped flows
-mark an unlabelled side with `-`: #75. When a server release closes
+mark an unlabelled side with `-`: #75. `find-unknown-endpoints`
+resolves an endpoint's `ip_lists` against the draft IP lists (the SDK
+default) with no `pversion` and no echo, so a draft-only list shows on
+an endpoint in the provisioned view: #76. When a server release closes
 one, drop the matching inference here.

@@ -85,11 +85,13 @@ What can we block or fence **now** with the least chance of breaking something, 
 
 **Triggers:** rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, emergency hardening, incident hardening, ransomware quick wins, what to fence first, 24-hour or 7-day plan, where does the risk sit, risk map.
 
+**Policy views:** provisioned only (default: what the PCE enforces today, the policy the reported decisions come from) or provisioned and draft (the delta: rulesets and rules the draft adds, changes or removes; per exposure whether a draft deny already covers it, a provisioned deny names it yet it reports allowed, or nothing is drafted). Scores use the provisioned rules in both views.
+
 **Prerequisites:**
 - The **illumio-mcp** MCP server, **0.13.1 or later** (`find-unknown-endpoints`, `get-traffic-timeline`, `detect-lateral-movement-paths`, `build-identity-graph`)
 - Python 3 for `scripts/triage.py` (stdlib only)
 
-**Steps:** the one question → connection → workloads (one unfiltered compact call) → the estate traffic summary and the admin-port flows grouped by app pair and port → lateral movement → unknown sources → identity graph → rulesets, the draft-to-active comparison and the blocked timeline → `scripts/triage.py` scores, builds the risk map and writes `plan.md`, `call-plans.md`, `report.md` and `dashboard.jsx` from one `plan.json` → present the map, the plan, the dashboard and, on request, the report. Nine data pulls plus the connection check.
+**Steps:** the one question → connection → workloads (one unfiltered compact call) → the estate traffic summary and the admin-port flows grouped by app pair and port → lateral movement → unknown sources → identity graph → the provisioned rulesets (plus the draft in the draft view), the draft-to-active comparison and the blocked timeline → `scripts/triage.py` scores, builds the risk map and writes `plan.md`, `call-plans.md`, `report.md` and `dashboard.jsx` from one `plan.json` → present the map, the plan, the dashboard and, on request, the report. Nine data pulls plus the connection check.
 
 **Layout:**
 - `SKILL.md` — the one question, PCE budget, steps 0 to 7, verification, older servers
