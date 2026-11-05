@@ -10,9 +10,17 @@ Inputs (<scratch>/, all optional except workloads; missing files are reported):
   lateral.json         detect-lateral-movement-paths
   unknown.json         find-unknown-endpoints, direction inbound
   identities.json      build-identity-graph, include_service_accounts false
-  rulesets.json        get-rulesets, pversion draft, unfiltered
+  rulesets.json        get-rulesets, pversion active (the provisioned policy), unfiltered
+  rulesets_draft.json  get-rulesets, pversion draft, unfiltered (draft view only: --policy draft)
   timeline.json        get-traffic-timeline, blocked + potentially_blocked, bucket 1d, spikes
-  draft_active.json    compare-draft-active (optional: says whether the draft rules are provisioned)
+  draft_active.json    compare-draft-active (optional: pending changes between draft and active)
+
+Policy views (--policy): "provisioned" reads the active rulesets only; "draft" reads both.
+Scores, admitting rules and "allowed, no rule" always use the provisioned rules, because the
+reported policy decisions in the traffic come from them. The draft view adds the delta: the
+rulesets and rules the draft adds, changes or removes, and for every exposure whether a
+provisioned deny already names it (yet it reports allowed), a draft deny covers it (work
+left: provision) or nothing does (work left: draft).
 
 Outputs: <out>/plan.json, <out>/plan.md (the one page), <out>/call-plans.md,
 <out>/report.md (the risk report: every exposure with its risk, evidence and
@@ -109,7 +117,7 @@ def clamp(x: int) -> int:
 
 def mix(counts: dict, not_admitted: int = 0) -> dict:
     """Decision mix of the connections a fix touches. `not_admitted` is the part of `allowed`
-    that no draft allow rule admits on workloads in selective enforcement: selective reports
+    that no provisioned allow rule admits on workloads in selective enforcement: selective reports
     everything a deny does not catch as allowed, so a new deny would catch it without
     contradicting any rule. It counts towards the deny-safe share with the denied decisions."""
     total = sum(counts.get(d, 0) for d in DECISIONS)
@@ -181,7 +189,7 @@ def pick_prod_envs(given: list[str], envs: Counter) -> list[str]:
 
 
 def existing_policy(rs: dict | None) -> dict:
-    """What draft policy already has: rulesets scoped per app, deny rules, RRR rulesets."""
+    """What a policy version already has: rulesets scoped per app, deny rules, RRR rulesets."""
     out = {"policy_version": (rs or {}).get("policy_version"), "scoped": {}, "fenced": set(),
            "deny_rules": [], "rrr_rulesets": []}
     for r in (rs or {}).get("rulesets", []):
@@ -205,6 +213,210 @@ def existing_policy(rs: dict | None) -> dict:
                 if scope_apps and any(p == "all workloads" for p in entry["providers"]):
                     out["fenced"] |= scope_apps
     return out
+
+
+def norm_href(h) -> str:
+    """The same object has /sec_policy/draft/ and /sec_policy/active/ hrefs; compare without."""
+    return str(h or "").replace("/sec_policy/draft/", "/sec_policy/").replace("/sec_policy/active/", "/sec_policy/")
+
+
+def rule_sig(rule: dict) -> str:
+    keep = {k: rule.get(k) for k in ("rule_type", "enabled", "consumers", "providers", "ingress_services", "unscoped_consumers", "resolve_labels_as")}
+    return norm_href(json.dumps(keep, sort_keys=True, default=str))
+
+
+def policy_delta(active: dict | None, draft: dict | None) -> dict:
+    """Rulesets and rules the draft adds, changes or removes against the provisioned policy,
+    matched by href with the policy version stripped."""
+    A = {norm_href(r.get("href")): r for r in (active or {}).get("rulesets", [])}
+    D = {norm_href(r.get("href")): r for r in (draft or {}).get("rulesets", [])}
+    rs = {"new": [], "changed": [], "removed": [], "unchanged": 0}
+    rules = Counter()
+    kinds: Counter = Counter()
+    for h, r in D.items():
+        if h not in A:
+            rs["new"].append(r.get("name"))
+            for rule in r.get("rules", []):
+                rules["new"] += 1
+                kinds[rule.get("rule_type") or "?"] += 1
+            continue
+        a = A[h]
+        ra = {norm_href(x.get("href")): x for x in a.get("rules", [])}
+        rd = {norm_href(x.get("href")): x for x in r.get("rules", [])}
+        n0 = sum(rules.values())
+        for k, x in rd.items():
+            if k not in ra:
+                rules["new"] += 1
+                kinds[x.get("rule_type") or "?"] += 1
+            elif rule_sig(x) != rule_sig(ra[k]):
+                rules["changed"] += 1
+        rules["removed"] += sum(1 for k in ra if k not in rd)
+        head = any(a.get(k) != r.get(k) for k in ("name", "enabled")) or norm_href(json.dumps(a.get("scopes"), sort_keys=True, default=str)) != norm_href(json.dumps(r.get("scopes"), sort_keys=True, default=str))
+        if head or sum(rules.values()) != n0:
+            rs["changed"].append(r.get("name"))
+        else:
+            rs["unchanged"] += 1
+    for h, a in A.items():
+        if h not in D:
+            rs["removed"].append(a.get("name"))
+            rules["removed"] += len(a.get("rules", []))
+    return {"rulesets": rs, "rules": {"new": rules["new"], "changed": rules["changed"], "removed": rules["removed"], "new_by_kind": dict(kinds)}}
+
+
+def side_names_env(kinds: list[tuple], env: str, scope_env: str | None) -> bool:
+    """Does one side of a deny name workloads carrying env=<env> exactly: all workloads, or an
+    env label equal to it, inside a scope that allows it? Other label keys, label groups and
+    IP lists only could, which is not enough to say a deny already names a crossing."""
+    if scope_env and scope_env != env:
+        return False
+    if any(k == "all" for k, _ in kinds):
+        return True
+    envs = {v for k, v in kinds if k == "env"}
+    return bool(envs) and env in envs
+
+
+def covering_denies(rs: dict | None, l: dict, default_lists: list[str]) -> list[dict]:
+    """Deny rules in this policy version that name the exposure: for X1 a deny whose consumer
+    is an IP list holding the source (or the default Any list) and whose providers reach the
+    peer apps; for X2 a deny from env=src to env=dst (env labels or all workloads, honouring
+    ruleset scope); for a ringfence a scoped ruleset with a deny to all workloads. Services
+    must cover the ports seen; a rule whose services are named (not resolvable here) is
+    returned with ports "unresolved" and does not count as a cover."""
+    out = []
+    if l["kind"] == "ringfence":
+        key = (l["app"], l["env"])
+        for r in (rs or {}).get("rulesets", []):
+            if r.get("enabled") is False:
+                continue
+            scoped = any((s.get("app"), s.get("env")) == key for s in rule_scopes(r))
+            if scoped and any(rule.get("rule_type") in ("deny", "override_deny") and rule.get("enabled") is not False
+                              and any(actor_kind(a)[0] == "all" for a in rule.get("providers", [])) for rule in r.get("rules", [])):
+                out.append({"key": ("fence", norm_href(r.get("href"))), "ruleset": r.get("name"), "rule_type": "deny",
+                            "text": f"{r.get('name')}: scoped ruleset for {l['app']} ({l['env']}) with a deny to all workloads", "ports": "all"})
+        return out
+    want = {(int(p.split("/")[0]), p.split("/")[1]) for p in (l["admin_ports"] if l["class"] == "X1" else l["ports"])}
+    lists = set(l.get("ip_lists") or []) | set(default_lists)
+    peers = {parse_identity(p) for p in l.get("peer_apps") or []} - {None}
+    for r in (rs or {}).get("rulesets", []):
+        if r.get("enabled") is False:
+            continue
+        sets = rule_scopes(r) or [{}]
+        for rule in r.get("rules", []):
+            if rule.get("rule_type") not in ("deny", "override_deny") or rule.get("enabled") is False:
+                continue
+            cons = [actor_kind(a) for a in rule.get("consumers", [])]
+            provs = [actor_kind(a) for a in rule.get("providers", [])]
+            unscoped = bool(rule.get("unscoped_consumers"))
+            hit = False
+            if l["class"] == "X1":
+                c_ok = any(k == "iplist" and v in lists for k, v in cons)
+                reach = any(not (s.get("app") or s.get("env")) or ((s.get("app"), s.get("env")) in peers)
+                            or (s.get("app") and not s.get("env") and any(a == s["app"] for a, _ in peers))
+                            or (s.get("env") and not s.get("app") and any(e == s["env"] for _, e in peers)) for s in sets)
+                p_ok = any(k == "all" or (k == "env" and any(e == v for _, e in peers)) or (k == "app" and any(a == v for a, _ in peers)) for k, v in provs)
+                hit = c_ok and reach and p_ok
+            else:
+                for s in sets:
+                    if side_names_env(provs, l["dst_env"], s.get("env")) and side_names_env(cons, l["src_env"], None if unscoped else s.get("env")):
+                        hit = True
+                        break
+            if not hit:
+                continue
+            svcs = rule.get("ingress_services") or []
+            all_svc = any((s.get("service") or {}).get("name") == "All Services" for s in svcs)
+            covered = {(p, pr) for p, pr in want for s in svcs if s.get("port")
+                       and int(s["port"]) <= p <= int(s.get("to_port") or s["port"]) and proto_name(s.get("proto")) == pr}
+            named = any("service" in s for s in svcs) and not all_svc
+            if all_svc or covered == want:
+                ports = "all"
+            elif covered:
+                ports = f"{len(covered)} of {len(want)} ports"
+            elif named:
+                ports = "unresolved"
+            else:
+                continue
+            scope_txt = "; ".join(", ".join(f"{k}={v}" for k, v in s.items()) for s in sets if s)
+            out.append({"key": (norm_href(rule.get("href")), rule_sig(rule)), "ruleset": r.get("name"), "rule_type": rule["rule_type"],
+                        "text": f"{r.get('name')} ({rule['rule_type'].replace('_', ' ')}{', scope ' + scope_txt if scope_txt else ''}): {', '.join(actor_text(a) for a in rule.get('consumers', []))} -> "
+                                f"{', '.join(actor_text(a) for a in rule.get('providers', []))} on {', '.join(service_text(x) for x in svcs)}"
+                                + ("" if ports == "all" else (" (named service, not resolved here)" if ports == "unresolved" else f" ({ports})")), "ports": ports})
+    return out[:8]
+
+
+def policy_view(view: str, active: dict | None, draft: dict | None, da: dict | None, lines: list[dict], default_lists: list[str]) -> dict:
+    """What the policy read covers, and per exposure whether a provisioned deny names it, a
+    draft deny covers it, or nothing does."""
+    for l in lines:
+        found = covering_denies(active, l, default_lists)
+        prov = [c for c in found if c["ports"] != "unresolved"]
+        unresolved = [c for c in found if c["ports"] == "unresolved"]
+        drafted = []
+        if view == "draft":
+            seen = {c["key"] for c in found}
+            drafted = [c for c in covering_denies(draft, l, default_lists) if c["key"] not in seen and c["ports"] != "unresolved"]
+        strip = lambda cs: [{k: v for k, v in c.items() if k != "key"} for c in cs[:5]]
+        l["cover"] = {"provisioned": strip(prov), "drafted": strip(drafted), "unresolved": strip(unresolved)}
+        l["policy_state"] = "drafted" if drafted else ("provisioned" if prov else "none")
+    states = Counter(l["policy_state"] for l in lines)
+    out = {"view": view, "read": active is not None, "pending": draft_state(da), "delta": policy_delta(active, draft) if view == "draft" else None,
+           "exposures": {"total": len(lines), "provisioned": states["provisioned"], "drafted": states["drafted"], "none": states["none"]}}
+    out["text"] = policy_text(out)
+    return out
+
+
+def policy_text(pol: dict) -> str:
+    pend, ex = pol["pending"], pol["exposures"]
+    s_ = lambda n: "" if n == 1 else "s"
+    if not pol.get("read", True):
+        return "Policy not read: no rulesets saved, so existing rules, admitting rules and 'allowed, no rule' were not checked."
+    if pol["view"] == "provisioned":
+        s = "Policy read: provisioned (active) rulesets, the policy the reported decisions come from."
+        if pend.get("available"):
+            s += (f" The draft holds {pend['pending']} pending change{s_(pend['pending'])} that were not read; the draft view shows what is drafted but not provisioned."
+                  if pend["pending"] else " Draft and active are in sync.")
+        else:
+            s += " compare-draft-active was not run, so whether the draft differs is unknown."
+        if ex["provisioned"]:
+            s += (f" {ex['provisioned']} exposure{s_(ex['provisioned'])} already {'has' if ex['provisioned'] == 1 else 'have'} a provisioned deny naming "
+                  f"{'it' if ex['provisioned'] == 1 else 'them'} that still reports allowed: check the enforcing side's mode and the rule's scope before adding another.")
+        return s
+    d = pol["delta"]
+    rs, ru = d["rulesets"], d["rules"]
+    if not (rs["new"] or rs["changed"] or rs["removed"] or ru["new"] or ru["changed"] or ru["removed"]):
+        s = "Policy read: provisioned and draft. The draft equals the provisioned policy, so every fix below is new work."
+    else:
+        kinds = ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(ru["new_by_kind"].items()))
+        s = (f"Policy read: provisioned and draft. The draft adds {len(rs['new'])} ruleset{s_(len(rs['new']))}"
+             + (f" ({', '.join(rs['new'][:3])}{', ...' if len(rs['new']) > 3 else ''})" if rs["new"] else "")
+             + f" and {ru['new']} rule{s_(ru['new'])}" + (f" ({kinds})" if kinds else "")
+             + f", changes {len(rs['changed'])} ruleset{s_(len(rs['changed']))}" + (f" ({', '.join(rs['changed'][:3])}{', ...' if len(rs['changed']) > 3 else ''}; {ru['changed']} rule{s_(ru['changed'])} changed)" if rs["changed"] else "")
+             + f", removes {len(rs['removed'])} ruleset{s_(len(rs['removed']))} and {ru['removed']} rule{s_(ru['removed'])}"
+             + (f"; compare-draft-active: {pend['pending']} pending change{s_(pend['pending'])}" if pend.get("available") else "; compare-draft-active was not run") + ".")
+    if ex["total"]:
+        s += (f" Of the {ex['total']} exposure{s_(ex['total'])}, {ex['drafted']} already {'has' if ex['drafted'] == 1 else 'have'} a draft deny or ringfence waiting for provisioning, "
+              f"{ex['provisioned']} {'has' if ex['provisioned'] == 1 else 'have'} a provisioned deny naming {'it' if ex['provisioned'] == 1 else 'them'} that still reports allowed, "
+              f"and {ex['none']} {'has' if ex['none'] == 1 else 'have'} nothing drafted: the work left is to provision {ex['drafted']} and draft {ex['none']}.")
+    return s
+
+
+def cover_text(l: dict, inline: bool = False) -> str:
+    """Sentences for the recommendation; with inline=True, clauses for a details line."""
+    c = l.get("cover") or {}
+    parts = []
+    if c.get("provisioned"):
+        parts.append("a provisioned deny already names this: " + "; ".join(x["text"] for x in c["provisioned"])
+                     + f"; it reports allowed, so check the enforcing side ({l.get('enforcing_side', '?')}) and the rule's scope before adding another")
+    if c.get("drafted"):
+        parts.append("already drafted, not provisioned: " + "; ".join(x["text"] for x in c["drafted"])
+                     + "; the work left is to review and provision that draft, not to draft another")
+    if c.get("unresolved"):
+        parts.append(f"{len(c['unresolved'])} provisioned den{'y names' if len(c['unresolved']) == 1 else 'ies name'} this source with a named service that cannot be resolved here, not checked: "
+                     + "; ".join(x["ruleset"] for x in c["unresolved"]))
+    if not parts:
+        return ""
+    if inline:
+        return "; " + "; ".join(parts)
+    return " " + " ".join(p[0].upper() + p[1:] + "." for p in parts)
 
 
 def actor_text(a: dict) -> str:
@@ -672,8 +884,9 @@ def call_plans(p: dict) -> list[dict]:
                                      + (f"; on lists {', '.join(l['ip_lists'])}" if g == "listed" else "")} for l in x1]})
     if any(l["class"] in ("X1", "X2") for l in p["lines"]):
         if p["policy"]["rrr_rulesets"]:
+            where = "provisioned" if set(p["policy"]["rrr_rulesets"]) - set(p["policy"].get("rrr_rulesets_drafted") or []) else "drafted, not provisioned"
             plans.append({"for": "ruleset", "tool": None, "DO_NOT_CALL": "nothing to call",
-                          "_notes": f"draft ruleset {rs} already exists; the deny rules below target it"})
+                          "_notes": f"RRR ruleset already exists ({', '.join(p['policy']['rrr_rulesets'])}; {where}); the deny rules below target {rs}"})
         else:
             plans.append({"for": "ruleset", "tool": "create-ruleset", "DO_NOT_CALL": "draft for review", "name": rs,
                           "description": f"Rapid risk reduction drafts {p['date']}; unscoped (scopes: [] = all workloads)",
@@ -697,6 +910,9 @@ def call_plans(p: dict) -> list[dict]:
                 notes["admitting_allow_rules"] = sorted({r for l in x1 for r in l.get("admitting_rules", [])})
         if g == "listed":
             notes["warning"] = "override deny beats every allow rule that admits these lists; the list owner must agree"
+        cov = cover_notes(x1)
+        if cov:
+            notes["already_covered"] = cov
         plans.append({"for": f"X1 ({g})", "tool": "create-deny-rule", "DO_NOT_CALL": "draft for review", "ruleset_name": rs,
                       "consumers": [f"iplist:RRR-unknown-admin-sources-{p['date']}{suffix}"], "providers": ["ams"],
                       "ingress_services": [{"port": int(ap.split('/')[0]), "proto": ap.split('/')[1]} for ap in ports],
@@ -705,6 +921,9 @@ def call_plans(p: dict) -> list[dict]:
         if l["class"] == "X2":
             notes = {"enforced_on": f"managed workloads carrying env={l['src_env']} in selective or full enforcement",
                      "would_have_blocked": l["would_have_blocked"], "admitting_rules": l.get("admitting_rules", [])}
+            cov = cover_notes([l])
+            if cov:
+                notes["already_covered"] = cov
             if l.get("directory_ports"):
                 notes["directory_warning"] = directory_warning(l)
                 notes["carve_out"] = {"tool": "create-rule", "DO_NOT_CALL": "draft for review, before the deny",
@@ -724,7 +943,8 @@ def call_plans(p: dict) -> list[dict]:
             plans.append({"for": f"{l['class']} {l['app']} ({l['env']})", "tool": "create-ringfence", "DO_NOT_CALL": "draft for review",
                           **base, "dry_run": False, "selective": True, "deny_consumer": "any",
                           "ruleset_name": f"RF-{l['app']}-{l['env']}",
-                          "_notes": "allow rules for every observed inbound remote app with app and env labels; unlabelled and IP-list sources get no allow and hit the deny"})
+                          "_notes": "allow rules for every observed inbound remote app with app and env labels; unlabelled and IP-list sources get no allow and hit the deny",
+                          **({"_already_covered": cover_notes([l])} if cover_notes([l]) else {})})
     for app, env in p["crown_jewels"]:
         name = f"EMERGENCY-ISOLATE-{app}-{env}"
         plans.append({"for": f"CJ {app} ({env})", "runbook": name, "DO_NOT_CALL": "run only on a confirmed incident", "steps": [
@@ -742,6 +962,20 @@ def call_plans(p: dict) -> list[dict]:
             {"undo": f"delete the override deny rules (delete-deny-rule) and the rulesets, then provision-policy again"},
         ]})
     return plans
+
+
+def cover_notes(ls: list[dict]) -> dict:
+    """For a call plan: the denies that already name these exposures, provisioned or drafted."""
+    out = {}
+    prov = sorted({c["text"] for l in ls for c in (l.get("cover") or {}).get("provisioned", [])})
+    drafted = sorted({c["text"] for l in ls for c in (l.get("cover") or {}).get("drafted", [])})
+    if prov:
+        out["provisioned"] = prov
+        out["provisioned_note"] = "a provisioned deny already names this and it reports allowed: check the enforcing side's mode and the rule's scope before adding another"
+    if drafted:
+        out["drafted"] = drafted
+        out["drafted_note"] = "already drafted, not provisioned: review and provision that draft instead of creating another"
+    return out
 
 
 # -------------------------------------------------------------------- risk map
@@ -863,9 +1097,9 @@ def env_matrix(summary: dict | None) -> list[dict]:
 
 
 def rule_drift(rs: dict | None, summary: dict | None, unknown: dict | None, admin: dict | None, wl: dict, window_start: str | None) -> tuple[list[dict], int]:
-    """Enabled override denies, in enabled rulesets, whose named traffic is reported allowed.
-    Plain denies are out: an allow rule legitimately beats them. Three rule shapes are
-    checked; everything else (role labels, named services) is counted as unchecked."""
+    """Enabled provisioned override denies, in enabled rulesets, whose named traffic is
+    reported allowed. Plain denies are out: an allow rule legitimately beats them. Three rule
+    shapes are checked; everything else (role labels, named services) is counted as unchecked."""
     found, unchecked = [], 0
     arows = admin_rows(admin)
     a2a = (summary or {}).get("app_to_app", [])
@@ -956,11 +1190,16 @@ def fix_first(rm: dict, lines: list[dict], crown: list[str]) -> list[str]:
     h = rm["headline"]
     if rm["rule_drift"]:
         names = ", ".join(d["ruleset"] for d in rm["rule_drift"][:3])
-        pend = rm["draft_active"]
-        out.append(f"Explain why {len(rm['rule_drift'])} enabled override den{'y' if len(rm['rule_drift']) == 1 else 'ies'} ({names}) "
+        out.append(f"Explain why {len(rm['rule_drift'])} enabled provisioned override den{'y' if len(rm['rule_drift']) == 1 else 'ies'} ({names}) "
                    f"{'does' if len(rm['rule_drift']) == 1 else 'do'} not show as blocked in the traffic: a provisioned override deny on an enforcing workload reports blocked, "
-                   + (f"and the draft has {pend['pending']} pending change{'s' if pend['pending'] != 1 else ''}; " if pend.get("available") else "and the rules were read as draft; ")
-                   + "every later step relies on rules biting.")
+                   "so check the enforcing side's mode, the rule's scope and its update time; every later step relies on rules biting.")
+    pol = rm.get("policy") or {}
+    ex = pol.get("exposures") or {}
+    if pol.get("view") == "draft" and ex.get("drafted"):
+        pend = pol["pending"]
+        out.append(f"Review and provision the draft: {ex['drafted']} of the {ex['total']} exposures below already have a draft deny or ringfence"
+                   + (f" ({pend['pending']} pending change{'s' if pend['pending'] != 1 else ''} in all)" if pend.get("available") else "")
+                   + "; that is finished work waiting on provision-policy.")
     internal = [l for l in lines if l["class"] == "X1" and l["address_class"] != "public"]
     if internal:
         widest = max(internal, key=lambda l: (l["peer_workloads"], l["would_have_blocked"]["allowed"]))
@@ -1002,12 +1241,15 @@ def takeaway(rm: dict) -> str:
         parts.append(f"{len(rm['rule_drift'])} override den{'y does' if len(rm['rule_drift']) == 1 else 'ies do'} not show in traffic")
     if ready["verdict"] == "partial":
         parts.append(f"{ready['unlabelled']} of {ready['workloads']} workloads are unlabelled")
+    pol = rm.get("policy") or {}
+    if pol.get("view") == "draft" and pol["exposures"]["total"]:
+        parts.append(f"{pol['exposures']['drafted']} of {pol['exposures']['total']} fixes are already drafted and wait for provisioning")
     if not parts:
         return "No exposure stands out in this window."
     return (parts[0][0].upper() + parts[0][1:]) + ("; " + "; ".join(parts[1:]) if len(parts) > 1 else "") + "."
 
 
-def risk_map(data: dict, wl: dict, lines: list[dict], window_start: str | None, lateral_days: int | None) -> dict:
+def risk_map(data: dict, wl: dict, lines: list[dict], window_start: str | None, lateral_days: int | None, policy: dict | None = None) -> dict:
     lat = data.get("lateral") or {}
     nodes = lat.get("top_reachable_nodes") or []
     total_apps = lat.get("total_apps")
@@ -1029,6 +1271,7 @@ def risk_map(data: dict, wl: dict, lines: list[dict], window_start: str | None, 
         "env_matrix": env_matrix(data.get("summary")),
         "rule_drift": drifted,
         "draft_active": draft_state(data.get("draft_active")),
+        "policy": policy or {},
         "inputs": {"summary": data.get("summary") is not None, "lateral": bool(nodes), "rulesets": data.get("rulesets") is not None,
                    "identities": bool((data.get("identities") or {}).get("identities")), "unknown": data.get("unknown") is not None},
         "apps_without_env_excluded": wl["labels"]["workloads"] - wl["labels"]["with_both"],
@@ -1073,13 +1316,26 @@ def not_admitted_text(l: dict) -> str:
     na = l["would_have_blocked"].get("allowed_not_admitted", 0)
     if not na:
         return ""
-    return (f"; {na} of the allowed connections are admitted by no draft allow rule and the enforcing side ({l.get('enforcing_side', '?')}) "
+    return (f"; {na} of the allowed connections are admitted by no provisioned allow rule and the enforcing side ({l.get('enforcing_side', '?')}) "
             f"is wholly in selective enforcement, which reports everything a deny does not catch as allowed: the deny would catch them without contradicting a rule")
 
 
 def action(l: dict) -> str:
-    """One clause for tables: what to do, when."""
+    """One clause for tables: what to do, when. A drafted cover replaces the action (the work
+    left is to provision); a provisioned cover is appended (it reports allowed: review)."""
     when = "today" if l.get("bucket") == "today" else "this week"
+    c = l.get("cover") or {}
+    if c.get("drafted"):
+        s = (f"provision the drafted {c['drafted'][0]['rule_type'].replace('_', ' ')} in {c['drafted'][0]['ruleset']}, {when}"
+             + ("; identify the source first" if l["class"] == "X1" and l.get("address_class") != "public" else ""))
+    else:
+        s = action_base(l, when)
+    if c.get("provisioned"):
+        s += f"; a provisioned {c['provisioned'][0]['rule_type'].replace('_', ' ')} in {c['provisioned'][0]['ruleset']} already names it and reports allowed: check enforcement mode and scope"
+    return s
+
+
+def action_base(l: dict, when: str) -> str:
     if l["class"] == "X1":
         if l.get("address_class") != "public":
             return f"identify the source, then label it or override deny it from an IP list to all workloads on {', '.join(l['admin_ports'])}, {when}"
@@ -1104,7 +1360,7 @@ def recommendation(l: dict) -> str:
             r += f" {wb['allowed']} allowed connections would stop; confirm admin access from this source may end first."
         if l.get("admitting_rules"):
             r += " Admitted today by: " + "; ".join(l["admitting_rules"]) + "."
-        return r
+        return r + cover_text(l)
     if l["class"] == "X2":
         r = (f"Draft a deny env={l['src_env']} -> env={l['dst_env']} on {', '.join(l['ports'])} in {l['ruleset']} ({when}); "
              f"enforced on managed workloads carrying env={l['src_env']} in selective or full enforcement.")
@@ -1113,7 +1369,7 @@ def recommendation(l: dict) -> str:
                   + ("; ".join(l.get("admitting_rules") or []) or "no rule naming these envs (a broader rule or an IP list)") + "; confirm first.")
         if l.get("directory_ports"):
             r += " Warning: " + directory_warning(l) + "."
-        return r
+        return r + cover_text(l)
     al = l["allow_list"]
     r = (f"Preview, then draft a selective ringfence RF-{l['app']}-{l['env']} with deny_consumer any ({when}): "
          f"allow rules for {len(al['remote_apps'])} observed inbound remote apps ({al['already_allowed']} already allowed), "
@@ -1125,8 +1381,8 @@ def recommendation(l: dict) -> str:
     if "visibility" in l["why"]:
         r += f" Then move the app's {l['why']['visibility']['workloads_not_enforcing']} non-enforcing workloads to selective enforcement (update-workload, not drafted here)."
     if l["already_fenced"]:
-        r += " A ringfence already exists in draft; review and provision that one instead."
-    return r
+        r += " A ringfence is already provisioned for this app; review why its deny does not show before adding another."
+    return r + cover_text(l)
 
 
 def watch_action(w: dict) -> str:
@@ -1148,7 +1404,7 @@ def wb_text(m: dict) -> str:
 
 def wb_note(m: dict) -> str:
     na = m.get("allowed_not_admitted", 0)
-    return f"; {na} of the allowed are admitted by no draft rule" if na else ""
+    return f"; {na} of the allowed are admitted by no provisioned rule" if na else ""
 
 
 def line_text(l: dict) -> str:
@@ -1174,21 +1430,21 @@ def details(l: dict) -> list[str]:
                 f"peer apps: {', '.join(l['peer_apps'][:6])}"
                 + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm admin access from this source may end" if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")
                 + (f"; admitted by: {'; '.join(l['admitting_rules'])}" if l.get("admitting_rules") else "")
-                + not_admitted_text(l)]
+                + not_admitted_text(l) + cover_text(l, True)]
     if l["class"] == "X2":
         return [f"  - ports seen: {', '.join(l['ports_seen'])}; app pairs: " + "; ".join(f"{a['from']} -> {a['to']} {a['policy']} {a['connections']}" for a in l["app_pairs"][:5])
                 + (f"; {l['would_have_blocked']['allowed']} allowed connections would stop: confirm they may, admitted by: "
                    + ("; ".join(l.get("admitting_rules") or []) or "no allow rule found naming these envs (a broader rule or an IP list)") if l["would_have_blocked"]["allowed"] and l["ease"] < 4 else "")
                 + not_admitted_text(l)
-                + (f"; warning: {directory_warning(l)}" if l.get("directory_ports") else "")]
+                + (f"; warning: {directory_warning(l)}" if l.get("directory_ports") else "") + cover_text(l, True)]
     al = l["allow_list"]
     why = " and ".join(filter(None, [f"bridge reaching {l['why']['bridge']['reachable_apps']} apps" if "bridge" in l["why"] else "",
                                     f"{l['why']['visibility']['workloads_not_enforcing']} workloads not enforcing with {l['why']['visibility']['denied_inbound_connections']} denied inbound connections" if "visibility" in l["why"] else ""]))
     return [f"  - why: {why}; enforcement: {modes_text(l['enforcement'])}; allow list: {len(al['remote_apps'])} remote apps, {al['already_allowed']} already allowed"
             + ("; no inbound app traffic observed, so the fence denies all inbound" if not al["remote_apps"] else "")
             + f"; no rule possible for {al['no_rule_possible']['connections']} connections from unlabelled or IP-list sources (they hit the deny)"
-            + ("; already fenced in draft, review that ruleset instead" if l["already_fenced"] else "")
-            + (f"; scoped rulesets: {', '.join(l['scoped_rulesets'])}" if l["scoped_rulesets"] else "")]
+            + ("; a ringfence is already provisioned, review why its deny does not show" if l["already_fenced"] else "")
+            + (f"; scoped rulesets: {', '.join(l['scoped_rulesets'])}" if l["scoped_rulesets"] else "") + cover_text(l, True)]
 
 
 def header_notes(p: dict) -> list[str]:
@@ -1210,6 +1466,7 @@ def header_notes(p: dict) -> list[str]:
     r = p["risk_map"]["readiness"]
     L.append(f"Labelling readiness: {r['verdict']}" + (f", {r['labelled']} of {r['workloads']} workloads carry app and env" if r["workloads"] else "")
              + ("; " + "; ".join(r["notes"]) if r["notes"] else "") + ".")
+    L.append(p["risk_map"]["policy"]["text"])
     return L
 
 
@@ -1221,6 +1478,9 @@ def map_line(rm: dict) -> str:
         s += f"; largest crossing {m['from']} to {m['to']}, {m['allowed']:,} allowed connections"
     if rm["rule_drift"]:
         s += f"; {len(rm['rule_drift'])} override den{'y' if len(rm['rule_drift']) == 1 else 'ies'} not showing in traffic"
+    pol = rm.get("policy") or {}
+    if pol.get("view") == "draft" and pol["exposures"]["total"]:
+        s += f"; {pol['exposures']['drafted']} of {pol['exposures']['total']} fixes already drafted, {pol['exposures']['none']} to draft"
     return s + "."
 
 
@@ -1238,7 +1498,10 @@ def write_plan_md(path: pathlib.Path, p: dict) -> None:
     L.append(f"Crown jewels: {', '.join(f'{a} ({e})' for a, e in p['crown_jewels']) or 'none'} ({p['crown_jewels_source']}).")
     L.append(f"Inputs read: {', '.join(k for k, v in p['inputs'].items() if v)}; missing: {', '.join(k for k, v in p['inputs'].items() if not v) or 'none'}.")
     L += header_notes(p)
-    L.append(f"Draft ruleset: `{p['ruleset_name']}`" + (f" (already exists in draft: {', '.join(p['policy']['rrr_rulesets'])})" if p['policy']['rrr_rulesets'] else "") + ". Nothing below is provisioned. Every rule is a draft to review; rollback is deleting it from the draft.")
+    rrr_prov = [x for x in p["policy"]["rrr_rulesets"] if x not in (p["policy"].get("rrr_rulesets_drafted") or [])]
+    rrr_draft = p["policy"].get("rrr_rulesets_drafted") or []
+    L.append(f"Draft ruleset: `{p['ruleset_name']}`" + (f" (RRR ruleset already provisioned: {', '.join(rrr_prov)})" if rrr_prov else "") + (f" (RRR ruleset already drafted, not provisioned: {', '.join(rrr_draft)})" if rrr_draft else "")
+             + ". Nothing below is provisioned. Every rule is a draft to review; rollback is deleting it from the draft.")
     b = p["buckets"]
     L.append(f"\n{len(p['lines'])} exposures with a draft fix: {len(b['today'])} to block today, {len(b['week'])} to fence this week, "
              f"{len(p['crown_jewels'])} isolation runbooks, {len(p['watch'])} to watch.")
@@ -1374,10 +1637,10 @@ def write_report_md(path: pathlib.Path, p: dict) -> None:
         L.append("No timeline saved; run get-traffic-timeline for the baseline.")
     L.append("Re-run the timeline 7 days after provisioning: blocked rows should rise and potentially blocked fall, and nothing else should move. Re-run this skill with the same window; lines whose rule is active should show their traffic as blocked.")
     L.append("\n## 7. Method and semantics\n")
-    L.append("Nine read-only illumio-mcp pulls over one window: workloads, the estate traffic summary, the admin-port flows grouped by app pair and port, lateral-movement paths, unknown endpoints, the identity graph, draft rulesets, the draft-to-active comparison and the blocked timeline. "
+    L.append(f"{'Ten' if p['policy_view'] == 'draft' else 'Nine'} read-only illumio-mcp pulls over one window: workloads, the estate traffic summary, the admin-port flows grouped by app pair and port, lateral-movement paths, unknown endpoints, the identity graph, the provisioned rulesets{' and the draft rulesets' if p['policy_view'] == 'draft' else ''}, the draft-to-active comparison and the blocked timeline. "
              "Override deny is evaluated before allow rules and is used only for unknown admin-port sources and the runbooks. A regular deny catches what no allow admits and needs selective or full enforcement to bite. "
              "A selective ringfence needs its deny rule. Deny rules with a label consumer are enforced on the source workloads; with an IP-list consumer at the destination, which is why deny_consumer any is the safest flavour. "
-             "Selective enforcement reports everything a deny does not catch as allowed, so an allowed connection that no draft allow rule admits counts as deny-safe in the ease score; full enforcement and visibility report allowed only when a rule matched. "
+             "Scores use the provisioned rules, the policy the reported decisions come from. Selective enforcement reports everything a deny does not catch as allowed, so an allowed connection that no provisioned allow rule admits counts as deny-safe in the ease score; full enforcement and visibility report allowed only when a rule matched. "
              "Labels are not assumed complete: workloads without app and env are counted as a readiness gap and kept out of every scoped finding. "
              "Rollback of any draft is deleting it; nothing here is provisioned. Call plans are in call-plans.md, every block marked DO_NOT_CALL.")
     path.write_text("\n".join(L) + "\n")
@@ -1410,8 +1673,20 @@ def report_map_section(rm: dict) -> list[str]:
             L.append(f"| {m['from']} | {m['to']} | {m['allowed']:,} | {m['potentially_blocked']:,} | {m['blocked']:,} |")
     else:
         L.append("\nNo traffic between environments" + ("" if rm["inputs"]["summary"] else " (no estate summary)") + ".")
-    L.append("\n**Rules not showing in traffic.** Enabled override denies whose named traffic is reported allowed. A provisioned override deny on an enforcing workload reports blocked, so check the pending changes, the rule's update time and the data before adding rules."
-             + (f" Draft to active: {rm['draft_active']['pending']} pending change{'s' if rm['draft_active']['pending'] != 1 else ''}." if rm["draft_active"].get("available") else " Rules were read as draft; compare-draft-active was not run.")
+    pol = rm.get("policy") or {}
+    L.append("\n**Policy read.** " + pol.get("text", "No rulesets saved."))
+    d = pol.get("delta")
+    if d and (d["rulesets"]["new"] or d["rulesets"]["changed"] or d["rulesets"]["removed"]):
+        L.append("\n| Draft against provisioned | Rulesets | Rules |\n| --- | --- | --- |")
+        L.append(f"| new | {', '.join(d['rulesets']['new']) or 'none'} | {d['rules']['new']}" + (" (" + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(d['rules']['new_by_kind'].items())) + ")" if d['rules']['new'] else "") + " |")
+        L.append(f"| changed | {', '.join(d['rulesets']['changed']) or 'none'} | {d['rules']['changed']} |")
+        L.append(f"| removed | {', '.join(d['rulesets']['removed']) or 'none'} | {d['rules']['removed']} |")
+    if pol.get("exposures", {}).get("total"):
+        ex = pol["exposures"]
+        L.append(f"\nExposures by policy state: {ex['drafted']} drafted (provision), {ex['provisioned']} provisioned but reported allowed (review), {ex['none']} nothing drafted (draft)." if pol.get("view") == "draft"
+                 else f"\nExposures with a provisioned deny already naming them: {ex['provisioned']} of {ex['total']}.")
+    L.append("\n**Rules not showing in traffic.** Enabled provisioned override denies whose named traffic is reported allowed. A provisioned override deny on an enforcing workload reports blocked, so check the enforcing side's mode, the rule's scope and its update time before adding rules."
+             + (f" {d['rules']['new_by_kind'].get('override_deny', 0)} override den{'y exists' if d['rules']['new_by_kind'].get('override_deny', 0) == 1 else 'ies exist'} only in the draft and cannot show in traffic until provisioned." if d and d["rules"]["new_by_kind"].get("override_deny") else "")
              + f" {h['override_denies_unchecked']} override denies use shapes this check does not cover (role labels, named services).")
     if rm["rule_drift"]:
         L.append("\n| Ruleset | Should stop | Reported allowed | Basis | Enforced on | Rule updated |\n| --- | --- | --- | --- | --- | --- |")
@@ -1440,7 +1715,9 @@ def dashboard_data(p: dict) -> str:
                 "X2": f"{len(l.get('dst_apps', []))} destination apps"}.get(l["class"], "")
     lines = [{"id": f"L{i}", "cls": l["class"], "kind": l["kind"], "bucket": l["bucket"], "score": l["score"], "blast": l["blast_radius"], "ease": l["ease"],
               "title": l["title"], "radius": radius(l), "wouldHaveBlocked": wb(l["would_have_blocked"]), "evidence": l["evidence"], "rollback": l["rollback"],
-              "detail": line_detail(l), "recommendation": l["recommendation"], "action": l["action"], "admittingRules": l.get("admitting_rules") or []}
+              "detail": line_detail(l), "recommendation": l["recommendation"], "action": l["action"], "admittingRules": l.get("admitting_rules") or [],
+              "state": l.get("policy_state", "none"), "cover": {"provisioned": [c["text"] for c in (l.get("cover") or {}).get("provisioned", [])],
+                                                                "drafted": [c["text"] for c in (l.get("cover") or {}).get("drafted", [])]}}
              for i, l in enumerate(sorted(p["lines"], key=lambda l: -l["score"]), 1)]
     b = p["baseline"]
     runbooks = []
@@ -1471,8 +1748,8 @@ def dashboard_data(p: dict) -> str:
     scope = {"date": p["date"], "windowStart": str(p["window"].get("start") or "?")[:10], "windowEnd": str(p["window"].get("end") or "?")[:10], "windowDays": p["window_days"],
              "lateralDays": p.get("lateral_days"), "adminSpan": p.get("admin_span") or {},
              "productionEnvs": p["production_envs"], "crownJewels": [f"{a} ({e})" for a, e in p["crown_jewels"]], "crownJewelsSource": p["crown_jewels_source"],
-             "rulesetName": p["ruleset_name"], "lowerBounds": [k for k, v in p["truncated"].items() if v], "missingInputs": [k for k, v in p["inputs"].items() if not v and k != "draft_active"],
-             "policyVersion": p["policy"].get("policy_version"), "headerNotes": header_notes(p)}
+             "rulesetName": p["ruleset_name"], "lowerBounds": [k for k, v in p["truncated"].items() if v], "missingInputs": p["missing_inputs"],
+             "policyView": p["policy_view"], "headerNotes": header_notes(p)}
     baseline = {"available": bool(b.get("available")), "bucket": b.get("bucket") or "1d", "effectiveBucket": b.get("effective_bucket"), "resolutionNote": b.get("resolution_note"),
                 "days": b.get("days", 0), "median": b.get("median_nonzero", 0),
                 "total": b.get("total_flows", 0), "worst": ({"bucketStart": b["worst"]["bucket_start"], "flows": b["worst"]["flows"], "multiple": b["worst"]["multiple"]} if b.get("worst") else None),
@@ -1500,12 +1777,24 @@ def dashboard_data(p: dict) -> str:
         "ruleDrift": [{"ruleset": d["ruleset"], "shouldStop": f"{', '.join(d['consumers'])} -> {', '.join(d['providers'])} on {', '.join(d['services'])}", "allowed": d["allowed_connections"],
                        "basis": d["basis"], "enforcedOn": d["enforced_on"], "updatedAt": str(d["rule_updated_at"] or "?")[:10], "changedInWindow": d["changed_in_window"]} for d in rm["rule_drift"]],
         "draftActive": {"available": bool(rm["draft_active"].get("available")), "pending": rm["draft_active"].get("pending", 0)},
+        "policy": policy_js(rm.get("policy") or {}),
         "fixFirst": rm["fix_first"],
         "inputs": rm["inputs"],
     }
     j = lambda v: json.dumps(v, indent=None, default=str)
     return "\n".join([f"const scope = {j(scope)};", f"const kpis = {j(kpis)};", f"const riskMap = {j(risk_map)};", f"const lines = {j(lines)};", f"const runbooks = {j(runbooks)};",
                        f"const watch = {j(watch)};", f"const baseline = {j(baseline)};", f"const callPlans = {j(plans)};"])
+
+
+def policy_js(pol: dict) -> dict:
+    d = pol.get("delta")
+    return {"view": pol.get("view", "provisioned"), "text": pol.get("text", ""),
+            "pending": {"available": bool(pol.get("pending", {}).get("available")), "pending": pol.get("pending", {}).get("pending", 0)},
+            "exposures": pol.get("exposures") or {"total": 0, "provisioned": 0, "drafted": 0, "none": 0},
+            "delta": ({"rulesetsNew": d["rulesets"]["new"], "rulesetsChanged": d["rulesets"]["changed"], "rulesetsRemoved": d["rulesets"]["removed"],
+                       "rulesetsUnchanged": d["rulesets"]["unchanged"], "rulesNew": d["rules"]["new"], "rulesChanged": d["rules"]["changed"], "rulesRemoved": d["rules"]["removed"],
+                       "newByKind": {"allow": d["rules"]["new_by_kind"].get("allow", 0), "deny": d["rules"]["new_by_kind"].get("deny", 0), "overrideDeny": d["rules"]["new_by_kind"].get("override_deny", 0)}}
+                      if d else None)}
 
 
 def write_dashboard(path: pathlib.Path, p: dict, template: pathlib.Path) -> str:
@@ -1540,14 +1829,26 @@ def main(argv=None) -> int:
     ap.add_argument("--window-days", type=int, default=30)
     ap.add_argument("--lateral-days", type=int, default=None, help="window of detect-lateral-movement-paths when it had to be shorter (default: the result's lookback_days)")
     ap.add_argument("--date", default=date.today().isoformat(), help="YYYY-MM-DD used in the draft ruleset name")
+    ap.add_argument("--policy", choices=("provisioned", "draft"), default="provisioned",
+                    help="provisioned: read rulesets.json (pversion active) only; draft: also read rulesets_draft.json and report the delta (default: provisioned)")
     ap.add_argument("--template", type=pathlib.Path, default=None, help="dashboard template (default: ../references/dashboard-example.jsx)")
     a = ap.parse_args(argv)
 
-    names = ("workloads", "summary", "admin_ports", "lateral", "unknown", "identities", "rulesets", "timeline", "draft_active")
+    names = ("workloads", "summary", "admin_ports", "lateral", "unknown", "identities", "rulesets", "rulesets_draft", "timeline", "draft_active")
     files = {n: a.scratch / f"{n}.json" for n in names}
     data = {n: load(f) for n, f in files.items()}
     if data["workloads"] is None:
         sys.exit(f"{files['workloads']} is required (get-workloads, compact, unfiltered)")
+    if data["rulesets"] is not None and str(data["rulesets"].get("policy_version") or "active").lower() != "active":
+        sys.exit(f"{files['rulesets']} holds the {data['rulesets'].get('policy_version')} policy; the script scores against the provisioned policy. "
+                 "Save get-rulesets pversion active there, and the draft pull as rulesets_draft.json for the draft view.")
+    if a.policy == "draft":
+        if data["rulesets_draft"] is None:
+            sys.exit(f"--policy draft needs {files['rulesets_draft']} (get-rulesets, pversion draft, unfiltered)")
+        if str(data["rulesets_draft"].get("policy_version") or "draft").lower() != "draft":
+            sys.exit(f"{files['rulesets_draft']} holds the {data['rulesets_draft'].get('policy_version')} policy, not the draft")
+    else:
+        data["rulesets_draft"] = None
 
     cols = (data["workloads"] or {}).get("columns") or []
     has_labels = {"app", "env"} <= set(cols)
@@ -1561,6 +1862,15 @@ def main(argv=None) -> int:
     x6 = x6_identities(data["identities"])
 
     lines = sorted(x1 + x2 + fences, key=lambda l: -l["score"])
+    unk_totals = (data["unknown"] or {}).get("totals") or {}
+    default_lists = unk_totals.get("default_ip_lists") or [ANY_LIST]
+    pol = policy_view(a.policy, data["rulesets"], data["rulesets_draft"], data["draft_active"], lines, default_lists)
+    if a.policy == "draft":
+        drafted_rrr = [n for n in existing_policy(data["rulesets_draft"])["rrr_rulesets"] if n not in policy["rrr_rulesets"]]
+        policy["rrr_rulesets_drafted"] = drafted_rrr
+        policy["rrr_rulesets"] = policy["rrr_rulesets"] + drafted_rrr
+    else:
+        policy["rrr_rulesets_drafted"] = []
     # Block today: denies with ease 4 or more, except internal unknown sources, which are
     # identified first (usually a scanner, a backup host or an unlabelled server).
     today = [l for l in lines if l["kind"] in ("deny", "override_deny") and l["ease"] >= 4
@@ -1570,12 +1880,11 @@ def main(argv=None) -> int:
         l["bucket"] = "today" if l in today else "week"
     window = (data["summary"] or data["unknown"] or data["timeline"] or {}).get("window") or {}
     lateral_days = a.lateral_days or (data["lateral"] or {}).get("lookback_days") or a.window_days
-    rm = risk_map(data, wl, lines, str(window.get("start") or "")[:10] or None, lateral_days)
+    rm = risk_map(data, wl, lines, str(window.get("start") or "")[:10] or None, lateral_days, pol)
     jewels, jewels_src = crown_jewels([parse_pair(c) for c in a.crown], fences, prod, rm["apps"])
     pin_crown(rm, jewels, lines)
 
     wl_env = data["workloads"] or {}
-    unk_totals = (data["unknown"] or {}).get("totals") or {}
     span = admin_span(data["admin_ports"])
     truncated = {
         "workloads": bool(wl_env.get("truncated")) or wl_env.get("total", 0) >= 10000,
@@ -1587,12 +1896,13 @@ def main(argv=None) -> int:
     plan = {
         "date": a.date, "ruleset_name": f"RRR-{a.date}", "window_days": a.window_days, "lateral_days": lateral_days,
         "window": window, "admin_span": span,
-        "inputs": {n: f.exists() for n, f in files.items()}, "truncated": truncated,
+        "inputs": {n: f.exists() for n, f in files.items() if n != "rulesets_draft" or a.policy == "draft"}, "truncated": truncated,
+        "policy_view": a.policy, "policy_delta": pol.get("delta"),
         "unknown_coverage": {"returned": unk_totals.get("returned"), "unknown_endpoints": unk_totals.get("unknown_endpoints")},
-        "default_ip_lists": unk_totals.get("default_ip_lists") or [ANY_LIST],
+        "default_ip_lists": default_lists,
         "production_envs": prod, "crown_jewels": jewels, "crown_jewels_source": jewels_src,
         "crown_jewel_workloads": {f"{a} ({e})": wl["apps"].get((a, e), {}).get("workloads", 0) for a, e in jewels},
-        "policy": {"policy_version": policy["policy_version"], "rrr_rulesets": policy["rrr_rulesets"],
+        "policy": {"policy_version": policy["policy_version"], "rrr_rulesets": policy["rrr_rulesets"], "rrr_rulesets_drafted": policy["rrr_rulesets_drafted"],
                    "deny_rules": policy["deny_rules"],
                    "scoped": {f"{a} ({e})": v for (a, e), v in policy["scoped"].items()},
                    "fenced": sorted(f"{a} ({e})" for a, e in policy["fenced"])},
@@ -1609,6 +1919,7 @@ def main(argv=None) -> int:
     for w in plan["watch"]:
         w["recommendation"] = watch_recommendation(w)
         w["action"] = watch_action(w)
+    plan["missing_inputs"] = [n for n, ok in plan["inputs"].items() if not ok and n != "draft_active"]
     plan["call_plans"] = call_plans(plan)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "plan.json").write_text(json.dumps(plan, indent=1, default=str))
@@ -1617,9 +1928,12 @@ def main(argv=None) -> int:
     write_report_md(a.out / "report.md", plan)
     template = a.template or pathlib.Path(__file__).resolve().parent.parent / "references" / "dashboard-example.jsx"
     dash_note = write_dashboard(a.out / "dashboard.jsx", plan, template)
-    missing = [n for n, ok in plan["inputs"].items() if not ok]
+    missing = plan["missing_inputs"]
+    ex = pol["exposures"]
     print(f"wrote {a.out / 'plan.json'}, plan.md, call-plans.md, report.md{dash_note}: {len(today)} today, {len(week)} this week, "
-          f"{len(jewels)} runbooks, {len(plan['watch'])} watch" + (f"; missing inputs: {', '.join(missing)}" if missing else ""))
+          f"{len(jewels)} runbooks, {len(plan['watch'])} watch; policy {a.policy}"
+          + (f", {ex['drafted']} drafted, {ex['provisioned']} provisioned, {ex['none']} to draft" if a.policy == "draft" else f", {ex['provisioned']} with a provisioned deny")
+          + (f"; missing inputs: {', '.join(missing)}" if missing else ""))
     return 0
 
 

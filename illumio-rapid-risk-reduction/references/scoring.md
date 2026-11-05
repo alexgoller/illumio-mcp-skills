@@ -90,18 +90,18 @@ override deny bites, and it will break whatever used the rule.
 rules, so there is no "potentially blocked" on it). An estate of
 selective workloads therefore shows no `potentially_blocked` at all and
 the denied share alone would score every deny as risky. The script
-reads the draft rules instead: when the **enforcing side** of a fix (the
+reads the provisioned rules instead: when the **enforcing side** of a fix (the
 source workloads carrying the consumer env for an X2 deny; the
 destination workloads of the source's peer apps for an X1 IP-list deny)
-is wholly in selective enforcement and **no draft allow rule could admit
+is wholly in selective enforcement and **no provisioned allow rule could admit
 the traffic** (`admitting_rules` empty, scope and `unscoped_consumers`
 honoured, named services counted as "could"), the allowed connections
 are `allowed_not_admitted` and count towards the deny-safe share with
 the denied decisions. They are shown as "allowed, no rule" (teal on the
 dashboard). Any mixed enforcement, or any rule that could admit the
-traffic, keeps them as plain `allowed`. A draft policy decision from the
-server would make this exact; until then it is an inference from the
-rulesets, stated as such.
+traffic, keeps them as plain `allowed`. A policy decision computed by
+the server against a chosen policy version would make this exact; until
+then it is an inference from the rulesets, stated as such.
 
 ## 4. Score and buckets
 
@@ -148,6 +148,9 @@ nothing else moving.
   visibility-only workload it reports `potentially_blocked`.
 - Rollback of any draft rule is deleting it from the draft; nothing in
   this plan is provisioned.
+- Scores use the **provisioned** policy: the reported decisions in the
+  traffic come from it. The draft is read only in the draft view, and
+  only to say what is already waiting (section 9).
 
 ## 7. The risk map (not the plan score)
 
@@ -202,11 +205,14 @@ unknown endpoints on that list; env consumer with literal ports and an
 app in scope against the admin-port rows); anything else counts as
 `override_denies_unchecked`. Each row carries the enforcing side's
 modes, `rule_updated_at` and whether the rule changed inside the window.
-The wording is "reported allowed", never "broken" or "bypassed": a
-provisioned override deny on an enforcing workload reports blocked, so
-the reasons left are a draft that is not provisioned
-(`compare-draft-active` pending changes are shown beside the table), a
-rule newer than the traffic, or data that is not what it looks like.
+The wording is "reported allowed", never "broken" or "bypassed": the
+rules are the provisioned ones, and a provisioned override deny on an
+enforcing workload reports blocked, so the reasons left are an
+enforcing side not in selective or full enforcement, a scope that does
+not reach the traffic, a rule newer than the traffic, or data that is
+not what it looks like. A draft-only override deny is not drift: it
+cannot show in traffic until provisioned, and the draft view counts it
+as work waiting (section 9).
 
 **Fix first.** Three to six sentences, each only when its evidence
 exists, in this order: label first (when the estate is not ready or the
@@ -231,3 +237,56 @@ the destination apps receiving those ports (the directory servers, read
 from the admin-port rows) and the call plan carries a carve-out: an
 allow for the source env to those apps on those ports, placed above the
 deny (an allow beats a plain deny), or the ports dropped from the deny.
+
+## 9. Policy views: provisioned, or provisioned and draft
+
+The **provisioned** view (`--policy provisioned`, default) reads
+`get-rulesets pversion: "active"` only. The **draft** view adds
+`pversion: "draft"` and reports the delta between what exists and what
+is left to do. Scores, admitting rules, "allowed, no rule" and the drift
+check use the provisioned rules in both views.
+
+**Delta** (`plan.json["policy_delta"]`, draft view). Rulesets and rules
+are matched by href with the policy version stripped
+(`/sec_policy/draft/` and `/sec_policy/active/` name the same object).
+A ruleset is *new* when only the draft has it, *removed* when only the
+active has it, *changed* when its name, enabled flag or scopes differ or
+any of its rules is new, removed or different (rule type, enabled,
+consumers, providers, services, `unscoped_consumers`). New rules are
+counted by kind. The `compare-draft-active` count sits beside it: it
+covers the whole draft (IP lists and services included), the delta only
+rulesets.
+
+**Cover per exposure** (`cover`, `policy_state`, both views for the
+provisioned part). A deny *names* an exposure when:
+
+| Exposure | Consumer | Provider | Services |
+| --- | --- | --- | --- |
+| X1 unknown source | an IP list the endpoint is on (`ip_lists`), or the default Any list | all workloads, or an env or app label of a peer app, in a ruleset whose scope reaches a peer app | All Services, or literal ports covering the admin ports seen |
+| X2 crossing | `env=<src>` or all workloads (inside the ruleset scope unless `unscoped_consumers`) | `env=<dst>` or all workloads inside the scope | All Services, or literal ports covering the ports seen (partial cover is marked "n of m ports") |
+| ringfence | any | a ruleset scoped to the app with a deny to all workloads | any |
+
+Other label keys, label groups and IP lists on a workload side only
+*could* match and do not count; a deny whose services are named
+(`S-SSH`) cannot be resolved here and is listed as `unresolved`, not as
+a cover. The state is `drafted` when a draft-only deny covers the line
+(a rule present in both versions but changed in the draft counts as
+draft-only), else `provisioned` when a provisioned deny names it, else
+`none`. A `drafted` line's action becomes "provision the drafted
+<rule> in <ruleset>"; a `provisioned` cover is appended ("already names
+it and reports allowed: check enforcement mode and scope"); the call
+plan carries both under `already_covered`.
+
+**Headline.** The policy line in every header: the view, the delta
+(draft view), the pending count, and "of the N exposures, D already
+have a draft deny or ringfence waiting for provisioning, P have a
+provisioned deny naming them that still reports allowed, and K have
+nothing drafted: the work left is to provision D and draft K". The
+dashboard shows the three counts as tiles (navy, red, orange) and a
+`DRAFTED` or `PROVISIONED, REPORTED ALLOWED` badge on the line.
+
+One caveat: `find-unknown-endpoints` resolves an endpoint's `ip_lists`
+against the draft IP lists (the server's SDK default, issue #76), so a
+draft-only list can show on an endpoint in the provisioned view; a
+provisioned deny can only name a provisioned list, so the cover is not
+affected, but the X1 "listed" grouping can be.

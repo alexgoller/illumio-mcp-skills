@@ -17,7 +17,11 @@ Explorer cap was hit"), the span the admin-port map really covers when
 it was capped, the unknown-endpoint coverage (`returned` of
 `unknown_endpoints`), the lateral-movement window when it was shorter
 than the plan's; the **labelling readiness** verdict with the unlabelled
-count and what sits outside every scoped fix; the draft ruleset name,
+count and what sits outside every scoped fix; the **policy line**
+(provisioned only, with the pending changes not read; or provisioned
+and draft, with the rulesets and rules the draft adds, changes and
+removes, and the exposures already drafted, provisioned but reported
+allowed, and left to draft); the draft ruleset name,
 `RRR-<date>`, and the sentence "Nothing below is provisioned. Every rule
 is a draft to review; rollback is deleting it from the draft."
 
@@ -26,7 +30,8 @@ fence this week, `<k>` isolation runbooks, `<w>` to watch."
 
 Then the map line: "Where the risk sits: `<top three apps>`; largest
 crossing `<from>` to `<to>`, `<n>` allowed connections; `<d>` override
-denies not showing in traffic." It is the same `risk_map` block the
+denies not showing in traffic; `<x>` of `<n>` fixes already drafted,
+`<k>` to draft" (the last clause in the draft view only). It is the same `risk_map` block the
 report and the dashboard read, so the three cannot disagree.
 
 ## 1. Block today

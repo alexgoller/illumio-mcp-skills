@@ -286,3 +286,61 @@ legend in every section; screenshots of the Risk map at 1280px and 400px inspect
 example's DATA block equals a fresh fixture run. The description is under 1024 characters and
 package.sh builds. Not run against a live PCE; the "allowed on selective" rule is inferred from
 enforcement modes and the draft rules, and flagged as such in scoring.md.
+
+# Rapid risk reduction: provisioned and draft policy views (2026-11-05)
+
+Request (forwarded from David Killian, verbatim): "If it could have 2 modes. Just look at
+provisioned policy. And look at both provisioned and policy in draft view (to see the delta
+between what exists, and what work is left to do)."
+
+Design: the triage scores against the **provisioned** (active) policy in both views, because
+the reported policy decisions in the traffic come from the provisioned policy. The draft view
+reads the draft as well and reports the delta: rulesets and rules new, changed or removed in
+the draft, and for every exposure whether a provisioned deny already names it (yet it reports
+allowed), a draft deny covers it (work left: provision), or nothing does (work left: draft).
+
+## Plan
+
+- [x] triage.py: `--policy provisioned|draft`; `rulesets.json` must be pversion active (exit
+      otherwise); draft view reads `rulesets_draft.json`; `draft_active.json` in both views
+- [x] triage.py: `covering_denies(rs, line)` for X1 (IP-list consumer), X2 (env consumer) and
+      ringfences (scoped ruleset with a deny to all workloads); `policy_delta` (rulesets and
+      rules new/changed/removed by normalised href, new rules by kind, pending count,
+      exposures drafted/provisioned/none); per-line `cover` and `policy_state`
+- [x] triage.py: wording moves from "draft rule" to "provisioned rule" where a decision is
+      explained; drift wording exact (provisioned override denies); draft-view sentences in
+      header, map line, takeaway, fix first, actions, call-plan notes
+- [x] Dashboard template: `scope.policyView`, `riskMap.policy`; Risk map tab "Policy" strip
+      (provisioned line, or the delta tiles in the draft view); line state badge; legends
+- [x] Fixtures: rulesets.json as active for all four sets; fixture draft with a new RRR
+      ruleset, a changed rule and a new ringfence; draft_active.json; demo100 draft equal to
+      active (delta zero); run_all.sh runs both views
+- [x] Verify: demo100 provisioned view reproduces 101 lines, 79 today, 22 week, drift 9/3/
+      6,709; draft view on identical draft says so; fixture draft view shows the delta; all
+      renders 0 errors with legends; screenshots inspected; DATA block of the example equals
+      a fixture draft-view run
+- [x] Docs: SKILL.md (Step 0 question, Step 6 pulls, Step 7 flag, Step 8, Verification,
+      Mistakes, description), scoring.md section 9, dashboard-spec.md, report-template.md,
+      risk-report-template.md, README.md; package.sh builds
+- [x] Branch, PR, memory
+
+## Review
+
+Both views run on the four data sets. demo100 provisioned view: unchanged 101 lines, 79
+today, 22 this week, 3 runbooks, 85 watch, drift 3 rows (9., 3., RF-ordering-Production),
+and 12 of 101 exposures already named by a provisioned deny (the pos Staging and ordering
+Production ringfence denies and the threat-feed override deny; all reported allowed, which
+is the drift finding seen from the exposure side). demo100 draft view with a draft equal to
+active: "the draft equals the provisioned policy", 0 drafted, 89 to draft. Synthetic
+fixture draft view: draft adds RRR-2026-10-20 and RF-ad-prod (4 rules), changes Core-AD
+(1 rule), 4 pending; 3 exposures drafted (ad ringfence, the internal source, mgmt->prod),
+1 provisioned but reported allowed (the public source, named by RF-shop-prod's Any deny),
+4 to draft; the drafted lines say "provision the drafted ... in ...". Two cover rules were
+tightened after the first run: a deny names a crossing only through env labels or all
+workloads (a quarantine-label or OT-label deny no longer counts), and a deny with named
+services (telnet, S-SSH) is listed as unresolved, not as a cover (it had marked all 101
+demo100 lines). All six outputs render eight tabs with 0 errors and a legend per section;
+Risk map at 1280 and 400 px and the This week tab inspected. The example's DATA block
+equals a fresh fixture draft-view run; description 1017 chars; package.sh builds. Server
+issue #76 filed (find-unknown-endpoints resolves ip_lists against the draft). Not run
+against a live PCE.

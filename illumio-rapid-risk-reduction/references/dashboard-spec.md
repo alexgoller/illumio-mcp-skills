@@ -34,7 +34,10 @@ and ship the plan and report without it.
 | This week (ringfence, deny after review, internal source to identify) | orange |
 | Watch, isolate on demand: nothing drafted | grey |
 | allowed by a rule (the rule would stop it) | green |
-| allowed, no draft rule, on selective enforcement (a deny would catch it) | teal |
+| allowed, no provisioned rule, on selective enforcement (a deny would catch it) | teal |
+| drafted, waiting for provisioning (policy tile, `DRAFTED` badge) | navy |
+| provisioned deny names it, reported allowed (policy tile, `PROVISIONED, REPORTED ALLOWED` badge) | red |
+| nothing drafted (policy tile) | orange |
 | potentially blocked (no allow rule covers them) | orange |
 | blocked (already stopped; the rule makes it stick) | red |
 | spike bucket in the baseline | red outline; 3x-median threshold a red dashed line |
@@ -69,11 +72,17 @@ const riskMap = { takeaway,
                   appsTotal, appsExcluded,
                   envMatrix: [ { from, to, allowed, potentiallyBlocked, blocked } ],
                   ruleDrift: [ { ruleset, shouldStop, allowed, basis, enforcedOn, updatedAt, changedInWindow } ],
-                  draftActive: { available, pending }, fixFirst: [], inputs: { summary, lateral, rulesets, identities, unknown } };
+                  draftActive: { available, pending },
+                  policy: { view: "provisioned"|"draft", text, pending: { available, pending },
+                            exposures: { total, provisioned, drafted, none },
+                            delta: null | { rulesetsNew: [], rulesetsChanged: [], rulesetsRemoved: [], rulesetsUnchanged,
+                                            rulesNew, rulesChanged, rulesRemoved, newByKind: { allow, deny, overrideDeny } } },
+                  fixFirst: [], inputs: { summary, lateral, rulesets, identities, unknown } };
 const lines = [ { id, cls: "X1"|"X2"|"X4"|"X5"|"X4+X5", kind: "override_deny"|"deny"|"ringfence",
                   bucket: "today"|"week", score, blast, ease, title, radius,
                   wouldHaveBlocked: { allowed, potentiallyBlocked, blocked, allowedNoRule }, evidence: [], rollback,
-                  detail, recommendation, action, admittingRules: [] } ];
+                  detail, recommendation, action, admittingRules: [],
+                  state: "drafted"|"provisioned"|"none", cover: { provisioned: [], drafted: [] } } ];
 const runbooks = [ { name, workloads, found, steps: [], effect, undo } ];
 const watch = [ { cls: "X3"|"X6", title, detail, recommendation } ];
 const baseline = { available, bucket, days, median, total, worst: { bucketStart, flows, multiple } | null,
@@ -96,9 +105,9 @@ to the top 12; its bands are shown as shading, never as a number, and
 - **AMBER** "N to fence or review this week" when only the week bucket has lines
 - **GREEN** "Nothing to draft" otherwise
 
-Subtitle: window, production environments, crown jewels, the draft
-ruleset name, lower-bound and missing-input notes, "nothing is
-provisioned".
+Subtitle: window, production environments, crown jewels, the policy
+read ("provisioned only" or "provisioned and draft"), the draft ruleset
+name, lower-bound and missing-input notes, "nothing is provisioned".
 
 ## Tabs
 
@@ -107,7 +116,13 @@ it. No second file.
 
 0. **Risk map**, top to bottom: the one-sentence takeaway (generated);
    the **Readiness** strip (badge and the labelling counts, what sits
-   outside every scoped fix); four KPIs (workloads in full enforcement
+   outside every scoped fix); the **Policy** section: the policy line
+   and, in the provisioned view, two tiles (exposures a provisioned deny
+   names yet reports allowed, red when above zero; pending changes not
+   read, grey), or in the draft view four tiles (drafted, navy;
+   provisioned but reported allowed, red; nothing drafted, orange;
+   pending changes, grey) and the delta table (rulesets and rules new,
+   changed, removed); four KPIs (workloads in full enforcement
    of N, unmanaged admin-port sources with the internal and public split
    only when public exist, apps reaching most of the estate of N over
    the lateral window with a dash when there is no lateral result,
@@ -177,5 +192,7 @@ It renders directly in Claude's UI.
 - [ ] The readiness badge matches `risk_map.readiness.verdict` and the unlabelled count is named when above zero
 - [ ] Bands are shading only; no rank score number on the page
 - [ ] "public" appears nowhere on the Risk map tab when `unmanagedAdminPublic` is zero
-- [ ] Drift rows say "reported allowed"; the pending-changes count or "compare-draft-active was not run" is beside the table
+- [ ] Drift rows say "reported allowed"; the explanation names the enforcing side's mode, the scope and the update time, never pending changes
+- [ ] The Policy section names the view; its tiles equal the policy line in plan.md and report.md; in the draft view the delta table is present and a `DRAFTED` line's action says "provision"
+- [ ] `DRAFTED` and `PROVISIONED, REPORTED ALLOWED` badges appear only on lines whose `state` says so, and the line-state legend sits under every table that shows them
 - [ ] The fix-first list names only apps and hosts present in the evidence
