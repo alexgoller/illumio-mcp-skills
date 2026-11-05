@@ -22,6 +22,22 @@ one number a reader needs, the currently allowed connections that would
 stop across every deny line. Then the top three lines as "score, class,
 exposure: action".
 
+## 1a. Where the risk sits
+
+Directly after the executive summary, from `plan.json["risk_map"]`, the
+same figures as the dashboard's Risk map tab and the plan's map line:
+the takeaway sentence; **Readiness** (verdict, labelled of total, what
+sits outside every scoped fix); **Headline** (enforcement modes,
+unmanaged admin-port sources with the public split only when public
+exist, apps reaching most of the estate over the lateral window,
+override denies not showing and unchecked); **Apps, ranked** (the top
+12 with the six measures and the map rank score, stated as not the
+plan score); **Traffic between environments** (allowed, potentially
+blocked, blocked per pair); **Rules not showing in traffic** (ruleset,
+should stop, reported allowed, basis, enforced on, rule updated, the
+pending-changes count or that compare-draft-active was not run);
+**Fix first** (the generated list). Neutral wording throughout.
+
 ## 2. Risk register
 
 One table, every line in score order, then the watch items:
@@ -68,11 +84,13 @@ window; blocked should rise and potentially blocked fall.
 
 ## 7. Method and semantics
 
-The eight pulls, the scoring reference, and the four Illumio sentences:
+The nine pulls, the scoring reference, and the Illumio sentences:
 override deny beats every allow and is for incidents; a selective
 ringfence needs its deny rule; deny rules are enforced on the consumer
 side with a label consumer and at the destination with an IP-list
-consumer; rollback is deleting the draft.
+consumer; selective enforcement reports everything a deny does not
+catch as allowed, so "allowed, no rule" counts as deny-safe; labels are
+not assumed complete; rollback is deleting the draft.
 
 ## Colour
 

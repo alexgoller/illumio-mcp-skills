@@ -10,25 +10,38 @@ every block marked `DO_NOT_CALL`.
 `Rapid risk reduction plan, <date>: <window start> to <window end>`
 
 Opening lines, one each: production environments assumed; crown-jewel
-apps (given, or defaulted to the top production bridges); the PCE
-queries used and whether any hit its cap ("counts on X1 are lower
-bounds: the Explorer cap was hit"); the draft ruleset name, `RRR-<date>`,
-and the sentence "Nothing below is provisioned. Every rule is a draft to
-review; rollback is deleting it from the draft."
+apps (given, defaulted to the top production bridges, or on a flat
+network to the top production apps on the risk map); the PCE queries
+used and whether any hit its cap ("counts on X1 are lower bounds: the
+Explorer cap was hit"), the span the admin-port map really covers when
+it was capped, the unknown-endpoint coverage (`returned` of
+`unknown_endpoints`), the lateral-movement window when it was shorter
+than the plan's; the **labelling readiness** verdict with the unlabelled
+count and what sits outside every scoped fix; the draft ruleset name,
+`RRR-<date>`, and the sentence "Nothing below is provisioned. Every rule
+is a draft to review; rollback is deleting it from the draft."
 
 Then one line of totals: "`<n>` exposures: `<a>` to block today, `<b>` to
 fence this week, `<k>` isolation runbooks, `<w>` to watch."
+
+Then the map line: "Where the risk sits: `<top three apps>`; largest
+crossing `<from>` to `<to>`, `<n>` allowed connections; `<d>` override
+denies not showing in traffic." It is the same `risk_map` block the
+report and the dashboard read, so the three cannot disagree.
 
 ## 1. Block today
 
 One line per rule, ordered by score:
 
-`<score> | <X#> <what> | blast radius <B> (<n> workloads/apps) | would have blocked <allowed>/<pb>/<blocked> connections (allowed/potentially blocked/blocked) | evidence: <rows> | rollback: delete the draft rule`
+`<score> | <X#> <what> | blast radius <B> (<n> workloads/apps) | would have blocked <allowed>/<pb>/<blocked> connections (allowed/potentially blocked/blocked); <m> of the allowed are admitted by no draft rule | evidence: <rows> | rollback: delete the draft rule`
 
 For X1 name the sources (IP, FQDN when known, the admin ports), say
 whether any reached an enforced workload (`allowed_into_enforced`), and
-that the rule is an **override deny** on purpose. For X2 name the
-environment pair, the admin ports seen, and the app pairs behind it.
+that the rule is an **override deny** on purpose; only public sources
+land here, an internal one is always "this week: identify first". For
+X2 name the environment pair, the admin ports seen, the app pairs
+behind it and, when the ports include Kerberos, LDAP or SMB, the
+directory servers and the carve-out.
 
 ## 2. This week: fence, or deny after review
 
@@ -67,9 +80,15 @@ window and nothing else should move."
 In apply order, each as a fenced JSON block with `"DO_NOT_CALL": "draft
 for review"` as its first key:
 
-1. `create-iplist` for the X1 sources
+1. `create-iplist` for the X1 sources, one list per group: public
+   sources nothing admits (`RRR-unknown-admin-sources-<date>`), public
+   sources an allow rule admits (`-review`), internal sources to
+   identify first (`-internal-review`), public sources already on a
+   named list (`-listed-review`, with the rules naming that list)
 2. `create-ruleset` `RRR-<date>` (unscoped, `scopes: []`)
-3. `create-deny-rule` per X1 and X2 line, `ruleset_name: "RRR-<date>"`
+3. `create-deny-rule` per X1 group and X2 line, `ruleset_name:
+   "RRR-<date>"`; an X2 block carrying directory ports has a
+   `carve_out` note with the allow to place above it
 4. `create-ringfence` per X4 and X5 line: the `dry_run: true` block is
    the user's preview call (never this skill's), then the same call with
    `dry_run: false`, `selective: true`, `deny_consumer: "any"`

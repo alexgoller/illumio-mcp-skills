@@ -56,3 +56,19 @@
 - A DATA-block marker mentioned in a header comment matched before the real
   marker and the generated file declared every constant twice. Search for
   markers on their own line (newline-wrapped), never as a bare substring.
+
+## 2026-11-05 risk map: labels and selective enforcement
+- Never assume an estate is labelled. The first version exited without app/env columns
+  and silently read `-` as an environment, producing six impossible denies. Treat `-`,
+  empty and null as missing, count the unlabelled, and make readiness the first finding.
+- `allowed` is not one thing. Selective enforcement reports everything a deny does not
+  catch as allowed, so on a selective estate the denied share is zero and every deny
+  scores as risky. Read the enforcement mode of the enforcing side and the draft rules
+  before scoring; say which inference was made.
+- An actor list in a rule is a conjunction of labels. Checking actors one by one cited
+  `app=swift, env=Production` as a consumer that could be `Users`.
+- Seeded demo traffic makes public sources look like the story. Rank on what is true on a
+  normal estate and keep anything that may be absent (public sources) as a footnote that
+  appears only when present, then test with that input removed.
+- zsh: an unquoted variable is not word-split (`$P` with several flags failed argparse);
+  use an array. `cp` is aliased interactive; use `command cp -f` in scripts.
