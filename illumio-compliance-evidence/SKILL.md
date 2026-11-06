@@ -48,10 +48,12 @@ checks the version.
 | `references/pack-template.md` | the document structure (Markdown and Word), status colours and legend, appendices |
 | `references/dashboard-example.jsx` | working dashboard with synthetic pack data; replace the data block |
 
-The docx mechanics (Arial, Illumio navy headings, status cells, validation)
-are those of the `illumio-pce-assessment` skill (directory
-`illumio-pce-security-assessment`); read the docx skill before building
-the Word document and the pptx skill before building the deck.
+The docx and pptx mechanics (Illumio Field: Montserrat with Arial as the
+fallback, Server Slate headings, status cells, validation; the deck on
+Zero Trust Tan with Server Slate title and divider slides) are in
+`references/outputs.md`, shared with the `illumio-pce-assessment` skill
+(directory `illumio-pce-security-assessment`); read the docx skill before
+building the Word document and the pptx skill before building the deck.
 
 ## Inputs
 

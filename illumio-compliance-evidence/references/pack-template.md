@@ -1,9 +1,11 @@
 # Evidence pack structure (Markdown and Word)
 
 The document rendering of `pack.json` (see `pack-schema.md`): one Word
-document per framework and scope, in the illumio-pce-assessment style
-(Arial, Illumio navy headings, status cells), built with the docx skill,
-and the same content as Markdown for diffing between runs. Everything
+document per framework and scope in the Illumio Field document style
+(Montserrat with Arial as the fallback, Server Slate headings, status
+cells; the colours, fonts and table rules are in `outputs.md` under
+"Illumio Field" and "docx"), built with the docx skill, and the same
+content as Markdown for diffing between runs. Everything
 below is a section heading in that order. The deck and the dashboard are
 defined in `outputs.md`.
 
@@ -36,8 +38,9 @@ One table: requirement, test ids, result (PASS, FAIL, EXCEPTION,
 ATTESTED, NOT TESTED; a row takes the worst of its tests in that order
 from FAIL down to PASS, as `tests.md` defines), evidence section. Status
 cells use the four colours and a legend row directly under the table:
-red FAIL, orange EXCEPTION (justified failure or capped result), green
-PASS, teal ATTESTED or NOT TESTED (the word in the cell tells them apart).
+Risk Red FAIL, Circuit Gold EXCEPTION (justified failure or capped
+result), Safeguard Green PASS, System Cyan ATTESTED or NOT TESTED (the
+word in the cell tells them apart).
 No other colour in the document carries meaning; the Method section
 repeats this sentence.
 

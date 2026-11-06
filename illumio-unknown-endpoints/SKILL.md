@@ -287,8 +287,9 @@ user asks for one, and never executed.
 Build the React artifact described in `references/dashboard-spec.md` from
 the report, starting from `references/dashboard-example.jsx` (keep its
 components, replace everything between `// ==== DATA ====` and
-`// ==== END DATA ====`): same palette and components as illumio-security-dashboard and
-illumio-daily-assessment (DM Sans, pill tabs, inline styles, `app (env)`
+`// ==== END DATA ====`): the Illumio Field palette and components that
+`references/dashboard-spec.md` defines (Montserrat, text tabs with an
+orange underline, square white cards on tan, inline styles, `app (env)`
 tuples), data embedded as constants, six tabs (Overview, Findings, Unknown
 sources, Unknown destinations, Subnets, Suggestions) and a Deep dive tab
 only when Step 3 ran. Every number on it is copied from the report; the
