@@ -487,10 +487,124 @@ pruned from the zip, description 991 chars. Server issues #78 to #82 filed. Not 
 against a live PCE; the `ip_address` prefix match for batching is the server's documented
 partial match, not verified live.
 
-## Backlog (2026-11-06)
-- Mythos readiness dashboard and report (Alex): a risk-reduction view of the estate against
-  AI-driven attackers (Mythos-class models that find, exploit and move laterally on their
-  own); adapt rapid-risk-reduction's triage and risk map rather than start over. Alex's
-  own term (no Illumio definition to follow); audience is the CISO: a readiness grade per
-  app or environment with what moves it up a level, risk map as the evidence appendix,
-  engineer-level call plans out of the main body. Plan after the label advisor ships.
+## illumio-mythos-readiness (planned 2026-11-06, check-in before building)
+
+Alex's own term, no Illumio definition behind it: how contained a breach stays when the
+attacker is an autonomous AI agent that finds a foothold, exploits and moves laterally at
+machine speed, with no human in the loop. Audience is the CISO. The thing that changes
+against such an attacker is time: controls that need a human to notice (visibility,
+alerts, a plan in the draft) count for little; controls already in force (enforcement,
+fences, closed admin ports) count. The grade therefore measures what is in force today,
+per app, and says what moves each app up one level. Engineer-level call plans stay in
+rapid-risk-reduction; the risk map is this report's evidence appendix.
+
+### Decisions taken (overrule at check-in)
+
+- **Separate skill, built on rapid-risk-reduction's output.** The skill's data step is
+  "run illumio-rapid-risk-reduction through its Step 7 with the same window (reuse a run
+  from today when one exists)"; `scripts/readiness.py` reads that run's `plan.json` plus
+  two raw inputs it lacks per app (`workloads.json` for enforcement modes and VEN state,
+  `lateral.json` for reach) and writes the grade. Scores, classes and the risk map stay
+  stated once, in RRR (lesson 2026-11-04). Folding the grade into RRR instead is out:
+  RRR's description already sits at the 1024-character limit and the trigger ("how ready
+  are we against AI attackers") would not fit. Cost: a user with only this zip is told to
+  install RRR first; INSTALL.md says so.
+- **A ladder of six levels, gates per level, per `app (env)`.** The level is the highest
+  whose gates and every lower gate pass. Unlabelled workloads form one row at level 0.
+  | Level | Name | Gate (all workloads of the app unless said) | The attacker's view |
+  | --- | --- | --- | --- |
+  | 0 | Unseen | fails level 1 | we would not know |
+  | 1 | Seen | labelled `app` and `env`, every workload managed by a VEN | we would know afterwards |
+  | 2 | Planned | a provisioned ruleset scoped to the app, or every workload already in full enforcement | we have rules; nothing stops it yet |
+  | 3 | Enforcing | every workload in selective or full; a selective app also needs its deny rule provisioned (RRR `policy.fenced`) | the attacker meets rules |
+  | 4 | Doors shut | no unknown or public source reaching the app on admin ports reported allowed (X1 with the app in `peer_apps`), no admin-port crossing from another environment into the app reported allowed (X2 destination apps) | the easy ways in are closed |
+  | 5 | Contained | every workload in full enforcement (selective enforces denies only), no unmanaged inbound (`unmanaged_inbound` 0), not a lateral bridge (`reachable_apps` under the RRR wide-reach threshold), no wide-reach account into it | a breach stays where it landed |
+  Levels 0 to 2 depend on a human noticing; 3 to 5 hold without one. The report says so.
+- **One estate number, with its rule stated.** The estate level is the highest level at
+  which at least 80% of managed workloads sit (apps weighted by workloads); the
+  distribution over levels and the same per environment sit next to it. No letter
+  grades: they invite argument about the mapping, the level names do not.
+- **What moves it up.** For each app the failing gates of the next level, each with
+  the RRR line that addresses it (X1 override deny, X2 deny, X4/X5 ringfence, enforcement
+  move, labelling) in one plain sentence, RRR's bucket (today, this week) as the effort
+  word, and a pointer to its call plan in RRR's appendix. Estate-level: the apps below the
+  estate's next level, ordered by workloads, so the shortest path to the next level reads
+  top down.
+- **Term in the output.** "Mythos readiness" appears as the title and is defined in the
+  report's first paragraph in one sentence; no model vendor or product is named. The
+  customer can rename it; the definition stands.
+- **Colour.** Gate pass Safeguard Green, gate fail Risk Red, not applicable or unknown
+  grey; level badge filled Server Slate at 3 and above (in force) and outlined below,
+  with the legend saying exactly that. Illumio Orange never a status.
+
+### Plan
+
+- [x] 0. Contract first: `scratchpad/mr/schema.md` with the `readiness.json` shape
+      (levels, gates, apps with gate results and next steps, envs, estate, evidence
+      pointers into RRR's `plan.json`), the inputs read and the dashboard DATA contract.
+- [x] 1. `references/ladder.md`: the six levels, gates, attacker's-view sentences, the
+      80% rule, the next-step mapping to RRR lines, Illumio semantics (selective
+      enforces denies only; full enforcement is default deny; a provisioned ruleset on a
+      visibility workload changes nothing). Stated once; the script quotes it.
+- [x] 2. `scripts/readiness.py` (stdlib): `--rrr <dir with plan.json> --scratch <dir>
+      --out <dir> --date`; reads `plan.json`, `workloads.json`, `lateral.json`; writes
+      `readiness.json`, `readiness.md`, `dashboard.jsx`; tolerant of a missing
+      `lateral.json` (level 5 gate marked unknown, never passed).
+- [x] 3. `references/report-template.md` (CISO report: the question and the answer,
+      the ladder, estate and environments, apps, what to do next, appendix A risk map,
+      appendix B method and semantics, appendix C pointer to RRR's call plans).
+- [x] 4. `references/dashboard-spec.md` and `dashboard-example.jsx`: tabs Readiness
+      (ladder, estate tiles, environment table), Apps (grid app x gate, level, next
+      step), Next steps, Evidence (RRR's risk map tables), Method; Illumio Field block
+      verbatim; legend on every coloured section; DATA markers on their own lines.
+- [x] 5. `SKILL.md`: description under 1024 chars (triggers: Mythos readiness, how
+      ready are we against AI-driven or autonomous attackers, breach containment grade,
+      containment maturity per app, CISO readiness report); Step 0 one question (window,
+      production envs, crown jewels passed through to RRR, format); Step 1 run RRR to
+      its Step 7; Step 2 script; Step 3 present (grade first, then what moves it up);
+      verification; mistakes avoided; requires server 0.13.1 (RRR's floor).
+- [x] 6. `tests/`: `make_fixtures.py` (three RRR scratch sets: all unlabelled, mixed
+      with every level 0 to 5 planted, all contained), `run_all.sh` (runs the sibling
+      `illumio-rapid-risk-reduction/scripts/triage.py` on each, then `readiness.py`),
+      `check.py` (planted level per app, 80% rule, next-step gate equals the first
+      failing gate, no level 5 without `lateral.json`), `expectations.md`. `tests/out/`
+      and `tests/fixtures/` git-ignored; package.sh already prunes `tests/`.
+- [x] 7. Render with `scratchpad/la/dash/render.sh`: five tabs, 0 errors at 1280 and
+      400 px, legends counted, screenshots read; example jsx byte-equal to the mixed
+      fixture run.
+- [x] 8. README (ten skills, section with layout and the RRR dependency), INSTALL.md row
+      (needs RRR installed), marketplace.json, .gitignore, cold read of `readiness.md`
+      as a CISO (no call plans, no scores in the main body, every number from the json).
+- [x] 9. Branch `skills/mythos-readiness`, PR, CI, review paragraph here, lessons.
+
+Parallel split as for the label advisor: contract first, then agent A (ladder + script
++ tests), agent B (dashboard spec + example), me (SKILL.md, report template, README,
+INSTALL), reconcile against the contract, render, PR.
+
+### Open at check-in
+
+1. Dependency on an RRR run versus a self-contained copy of RRR's nine pulls (recommend
+   the dependency; RRR's description is at the limit, and two scorers would drift).
+2. The level names and the 80% estate rule (my call; rename or re-threshold freely).
+3. Crown jewels: RRR's choice carries over and crown-jewel apps are pinned to the top of
+   the apps table; nothing else changes for them. Say if the CISO view should grade
+   crown jewels on a stricter ladder.
+
+### Review (2026-11-06)
+
+Built as planned with the contract first and two agents on disjoint files; six contract
+gaps came back from the dashboard agent and were settled before the script was finished.
+Fixtures: unlabelled (one row at 0), mixed (98 workloads, every level 0 to 5 planted, estate
+level 2 by the 80% rule), contained (all 5), and mixed without `lateral.json` (reach unknown,
+no level 5, a `check_reach` step). `check.py` proves the planted levels, the 80% rule, that
+every step is a gate of the next level, no score anywhere in the main body, crown jewels
+first, the evidence equal to RRR's risk map, and the dashboard DATA equal to the json.
+Example dashboard byte-equal to the mixed run; five tabs render with 0 errors at 1280 and
+400 px with a legend on every coloured section. Three fixes after the agents: call-plan
+pointers now name the headings RRR writes (`X2 dev->prod`, `X1 (internal)`, `X5 ci (dev)`)
+instead of line titles; "autonomous AI agent" restored in the definition (both agents had
+dropped "AI"); the colour key's "partial" now says it is the labelling verdict on the
+evidence tab. Ten zips build, tests pruned, description 964 chars. Server issues #83 (X1
+decisions per peer app) and #84 (identities: destinations capped at 10) filed. Not run
+against a live PCE; the RRR dependency means a live run is that skill's nine pulls plus
+one script call.

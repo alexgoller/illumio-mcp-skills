@@ -29,6 +29,7 @@ secret. Some skills need a minimum server version:
 | Skill | Invocation name | Needs server | Why |
 |---|---|---|---|
 | illumio-rapid-risk-reduction | `illumio-rapid-risk-reduction` | 0.13.1 | `find-unknown-endpoints`, `get-traffic-timeline`, `detect-lateral-movement-paths`, `build-identity-graph` |
+| illumio-mythos-readiness | `illumio-mythos-readiness` | 0.13.1 | reads a rapid-risk-reduction run; install that skill too |
 | illumio-compliance-evidence | `illumio-compliance-evidence` | 0.13.0 | `collect-compliance-evidence` |
 | illumio-label-advisor | `illumio-label-advisor` | 0.13.0 | `group_by` on `get-traffic-flows`, label shorthand in include filters, `detail_level` on `get-workloads` |
 | illumio-unknown-endpoints | `illumio-unknown-endpoints` | 0.13.0 | `find-unknown-endpoints` (the v1.1.0 release of this repo works on older servers) |
@@ -41,9 +42,9 @@ secret. Some skills need a minimum server version:
 A skill checks the server version on its first call (`get-server-changelog`)
 and tells you when the server is too old.
 
-**Python 3** on the path for the four skills that ship a script
+**Python 3** on the path for the five skills that ship a script
 (`illumio-app-profile`, `illumio-agentic-ai-risk-assessment`,
-`illumio-rapid-risk-reduction`, `illumio-label-advisor`). The scripts use the standard library only and
+`illumio-rapid-risk-reduction`, `illumio-label-advisor`, `illumio-mythos-readiness`). The scripts use the standard library only and
 never talk to the PCE.
 
 **Anthropic's document skills** for the skills that write Word or PowerPoint

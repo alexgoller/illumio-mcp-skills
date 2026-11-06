@@ -5,3 +5,5 @@ __pycache__/
 tasks/handover/
 illumio-label-advisor/tests/out/
 illumio-label-advisor/tests/fixtures/
+illumio-mythos-readiness/tests/out/
+illumio-mythos-readiness/tests/fixtures/
