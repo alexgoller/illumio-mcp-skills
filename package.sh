@@ -21,6 +21,7 @@ for dir in */; do
   fi
   cp -R "$dir" "$stage/$name"
   find "$stage/$name" \( -name .DS_Store -o -name __pycache__ \) -prune -exec rm -rf {} +
+  rm -rf "$stage/$name/tests"   # fixtures and checks stay in the repo, not in the zip
   (cd "$stage" && zip -qr -X "$OLDPWD/dist/$name.zip" "$name")
   echo "dist/$name.zip"
 done
