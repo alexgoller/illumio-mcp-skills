@@ -358,3 +358,16 @@ against a live PCE.
 
 ### Review
 One manifest file turns the repo into a marketplace, which replaced the README's old `--plugin-dir x.zip` advice (true, but session-only and namespaced `x:x`). "Unzip it into your skills directory" was also true but hid that the folder name becomes the invocation name, which bites for the two directories named differently from their skills. Desktop and claude.ai menu paths come from the help centre, not from a local test. A `&&` chain that failed at `git checkout` silently skipped the todo append in the first attempt; the plan is recorded here after the merge.
+
+## 2026-11-06 Illumio Field design across all skills
+
+Finding: no skill followed Illumio Field. Seven rendering skills shared an older palette (green `#00C48C` labelled "Illumio primary", navy `#1A1F36`, orange `#FF6B35`, teal `#00B4D8`, Tailwind greys, DM Sans or Inter, rounded cards, pill badges); the docx rules used Arial and "Illumio Dark Navy". app-profile renders text only.
+
+- [x] One "Illumio Field" block, identical in every rendering skill (seven copies, diffed against the source): tan and white grounds, Server Slate text, `#D6D7D7` borders, Illumio Orange accent only, status red `#BE122F` / green `#166644` / gold `#F97607` and `#FFA22F` / cyan `#2D454C`, Montserrat, square corners, slate table header rows
+- [x] Dashboards: `const C` replaced in security-dashboard and daily SKILL.md, unknown-endpoints spec and example, compliance example, rapid-risk-reduction example (triage.py template) and spec; DM Sans to Montserrat; radii 0 and 2 only; legends and colour keys renamed
+- [x] Documents: pce-assessment docx rules, compliance pack-template and outputs (docx and pptx), agentic-ai report template and Sankey (light theme only; the dark theme had no Field definition)
+- [x] README convention names Illumio Field; the agentic-ai layout no longer lists two files that never existed
+- [x] Verify: rapid-risk-reduction six runs rendered (48 tabs, no errors, legend on every coloured section, example equals the generated file); unknown-endpoints and compliance examples rendered (7 tabs each, no errors); Sankey rendered with filters exercised; screenshots at 1280 and 400 inspected; no old hex, DM Sans or pill left in any skill; package.sh builds eight zips; descriptions unchanged
+
+### Review
+Four agents in four worktrees, one skill group each, merged without a conflict; the shared block and palette were written once and inserted verbatim, which is what made the seven copies identical. Judgement calls to look at: the daily health banner's middle state is Circuit Gold with slate text; the Sankey's first two series (Server Slate, System Cyan) are close in hue, named by the legend and chips; KPI numbers in rapid-risk-reduction use weight 300 like the title.

@@ -93,3 +93,11 @@
   shows; two repo directories differ from their skill names, so install from the zips.
 - Menu paths in the web and Desktop apps cannot be tested from the CLI; cite the help
   centre article and say so in the doc.
+
+## 2026-11-06 Illumio Field
+- "The skills have the brand design" was a premise to check, not a fact: every skill carried a palette
+  that called itself Illumio and matched nothing in the brand guideline. Grep the hexes against the
+  design system's tokens before agreeing.
+- A shared visual rule across standalone zips: write the block once in the scratchpad, insert it
+  verbatim everywhere, and diff each copy against the source at the end. Parallel agents in their
+  own worktrees merged cleanly because the file sets did not overlap.
