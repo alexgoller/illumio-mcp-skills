@@ -8,6 +8,15 @@ flow table and are re-checked in the verification task before publishing.
 Placeholders in `{braces}` are filled from the data. Delete rows and
 sub-bullets that have no evidence rather than writing "none".
 
+Styling follows Illumio Field (SKILL.md, Outputs). Headings are Server Slate
+`#313638`; in Markdown a status is a word (Critical, High, Medium, Low, Pass,
+Fail, Allowed, Blocked), never a colour. A Word export follows the
+illumio-pce-assessment document rules: Montserrat with Arial fallback, Server
+Slate headings and header rows, `D6D7D7` borders, `EAEBEB` banding, status
+cells Risk Red `BE122F`, Circuit Gold `F97607`, Safeguard Green `166644`,
+System Cyan `2D454C` with a legend row under the first table that uses them,
+and Illumio Orange `FF5500` only as the rule under the title.
+
 ---
 
 ## 1. Executive summary
@@ -59,7 +68,7 @@ Possible agent hosts (not scored):
 Agents on endpoints reach `{K}` applications on `{H}` hosts; `{app}` receives
 the most connections.
 
-`{Stacked bar: connections by app (x) and agent (colour), fixed agent order, with a legend naming every agent colour}`
+`{Stacked bar: connections by app (x) and agent (colour), fixed agent order, brand chart series Server Slate, System Cyan, Illumio Orange, Cloud Cerulean, Circuit Gold, Protocol Purple, with a legend naming every agent colour}`
 
 Then one bullet per application family, naming the ports and whether they are
 the app's expected service:

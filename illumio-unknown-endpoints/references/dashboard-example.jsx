@@ -4,15 +4,33 @@ import React, { useState, useMemo } from "react";
 // A real run replaces every constant below with the report's numbers.
 
 const C = {
-  green: "#00C48C", greenLight: "#E8FAF3", greenDark: "#00A876",
-  teal: "#00B4D8", tealLight: "#E5F7FB",
-  navy: "#1A1F36",
-  orange: "#FF6B35", orangeLight: "#FFF3ED",
-  red: "#E63946", redLight: "#FDE8EA",
-  amber: "#FEF3C7", amberDark: "#92400E",
-  gray50: "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB", gray300: "#D1D5DB",
-  gray400: "#9CA3AF", gray500: "#6B7280", gray700: "#374151", white: "#FFFFFF",
+  accent: "#FF5500",          // Illumio Orange: active tab underline, title rule, today/new marker; never a status
+  slate: "#313638",           // Server Slate: headings, primary text, table header rows
+  text: "#464A4C",            // body text
+  muted: "#64686A",           // captions, labels
+  green: "#166644",           // Safeguard Green: pass, allowed, enforced, healthy
+  greenLight: "rgba(22,102,68,0.10)",
+  greenDark: "#11432F",
+  teal: "#2D454C",            // System Cyan: info, selective, in progress
+  tealLight: "rgba(45,69,76,0.10)",
+  orange: "#F97607",          // Circuit Gold 110: warning, high (fills, swatches, bars; slate text on its tint)
+  orangeLight: "rgba(249,118,7,0.10)",
+  amber: "#FFA22F",           // Circuit Gold 100: medium
+  amberLight: "rgba(255,162,47,0.12)",
+  red: "#BE122F",             // Risk Red: critical, failed, blocked
+  redLight: "rgba(190,18,47,0.10)",
+  gray50: "#F7F4EE",          // page ground: Zero Trust Tan
+  gray100: "#F5F5F5",         // subtle fills
+  gray200: "#D6D7D7",         // borders
+  gray300: "#C1C3C3",
+  gray400: "#6F7274",         // muted text, minimum for small text on white
+  gray500: "#64686A",         // secondary text
+  gray700: "#464A4C",         // strong secondary text
+  white: "#FFFFFF",
 };
+const FONT = '"FK Grotesk", Montserrat, Arial, sans-serif';
+// <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet" />
+const BAND = "#EAEBEB";       // table banding
 
 // ==== DATA ====
 const scope = {
@@ -125,17 +143,18 @@ const deepDive = {
 };
 // ==== END DATA ====
 
-const font = "'DM Sans', system-ui, sans-serif";
+// Status fills. Gold fills (Circuit Gold, Gold) carry slate text, never
+// white, and gold is never used as small text on its own.
 const sev = {
   high: { bg: C.red, color: C.white },
-  medium: { bg: C.orange, color: C.white },
-  low: { bg: C.amber, color: C.amberDark },
+  medium: { bg: C.orange, color: C.slate },
+  low: { bg: C.amber, color: C.slate },
   info: { bg: C.teal, color: C.white },
   ok: { bg: C.green, color: C.white },
 };
 const classChip = {
-  private: { bg: C.tealLight, color: C.navy },
-  public: { bg: C.orangeLight, color: C.orange },
+  private: { bg: C.tealLight, color: C.slate },
+  public: { bg: C.orangeLight, color: C.slate, border: C.orange },
   noise: { bg: C.gray100, color: C.gray500 },
 };
 
@@ -147,10 +166,11 @@ function worstSeverity(list) {
 
 const fmt = (n) => (n == null ? "–" : n.toLocaleString("en-US"));
 
-function Badge({ label, color, bg, mono }) {
+// Small tag: the one place with a radius (2px). Never a pill.
+function Badge({ label, color, bg, border, mono }) {
   return (
-    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-      background: bg, color, letterSpacing: 0.2, fontFamily: mono ? "ui-monospace, Menlo, monospace" : font, whiteSpace: "nowrap" }}>
+    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 2, fontSize: 11, fontWeight: 600, background: bg, color,
+      border: border ? `1px solid ${border}` : "none", letterSpacing: 0.2, fontFamily: mono ? "ui-monospace, Menlo, monospace" : FONT, whiteSpace: "nowrap" }}>
       {label}
     </span>
   );
@@ -158,27 +178,29 @@ function Badge({ label, color, bg, mono }) {
 const SeverityBadge = ({ s }) => <Badge label={s.toUpperCase()} {...(sev[s] || sev.info)} />;
 const ClassChip = ({ c }) => <Badge label={c} {...(classChip[c] || classChip.noise)} />;
 
-// attention: "high" | "medium" | undefined. The top border is red or orange
-// only when the value is non-zero and the KPI is a risk; grey otherwise.
+// attention: "high" | "medium" | undefined. The top border is Risk Red or
+// Circuit Gold only when the value is non-zero and the KPI is a risk; grey
+// otherwise. White square tile on the tan ground, 1px border.
 function KPICard({ label, value, subtitle, attention }) {
   const border = value > 0 && attention === "high" ? C.red : value > 0 && attention === "medium" ? C.orange : C.gray300;
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: "14px 16px", borderTop: `4px solid ${border}`, minWidth: 0 }}>
-      <div style={{ fontSize: 12, color: C.gray500, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: 30, fontWeight: 800, color: C.navy, lineHeight: 1.2, marginTop: 4 }}>{fmt(value)}</div>
+    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, padding: "14px 16px", borderTop: `4px solid ${border}`, minWidth: 0 }}>
+      <div style={{ fontSize: 11, color: C.slate, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.6 }}>{label}</div>
+      <div style={{ fontSize: 30, fontWeight: 600, color: C.slate, lineHeight: 1.2, marginTop: 4 }}>{fmt(value)}</div>
       {subtitle && <div style={{ fontSize: 12, color: C.gray500, marginTop: 2 }}>{subtitle}</div>}
     </div>
   );
 }
 
 function StatusBanner({ status, title, subtitle }) {
-  const map = { high: { bg: C.red, icon: "●" }, medium: { bg: C.orange, icon: "●" }, ok: { bg: C.green, icon: "●" } };
+  // Risk Red and Safeguard Green take white text; Circuit Gold takes slate.
+  const map = { high: { bg: C.red, fg: C.white, icon: "●" }, medium: { bg: C.orange, fg: C.slate, icon: "●" }, ok: { bg: C.green, fg: C.white, icon: "●" } };
   const m = map[status] || map.ok;
   return (
-    <div style={{ background: m.bg, color: C.white, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+    <div style={{ background: m.bg, color: m.fg, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
       <span style={{ fontSize: 22 }}>{m.icon}</span>
       <div>
-        <div style={{ fontWeight: 800, fontSize: 17 }}>{title}</div>
+        <div style={{ fontWeight: 600, fontSize: 17 }}>{title}</div>
         <div style={{ fontSize: 13, opacity: 0.92 }}>{subtitle}</div>
       </div>
     </div>
@@ -188,7 +210,7 @@ function StatusBanner({ status, title, subtitle }) {
 // Swatch + text, used by every Legend. kind: "fill" (box), "text" (coloured
 // bold text), "outline" (box outline), "dash" (dashed line).
 function Swatch({ color, kind }) {
-  if (kind === "text") return <span style={{ color, fontWeight: 800, fontFamily: "ui-monospace, Menlo, monospace" }}>22/tcp</span>;
+  if (kind === "text") return <span style={{ color, fontWeight: 600, fontFamily: "ui-monospace, Menlo, monospace" }}>22/tcp</span>;
   if (kind === "outline") return <span style={{ display: "inline-block", width: 14, height: 10, border: `2px solid ${color}`, borderRadius: 2 }} />;
   if (kind === "dash") return <span style={{ display: "inline-block", width: 18, borderTop: `2px dashed ${color}` }} />;
   return <span style={{ display: "inline-block", width: 14, height: 10, background: color, borderRadius: 2 }} />;
@@ -200,7 +222,7 @@ function Legend({ items }) {
   return (
     <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: C.gray500, marginTop: 10,
       paddingTop: 8, borderTop: `1px dashed ${C.gray200}` }}>
-      <span style={{ fontWeight: 700 }}>Legend</span>
+      <span style={{ fontWeight: 600 }}>Legend</span>
       {items.map(([label, color, kind], i) => (
         <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={color} kind={kind} />{label}</span>
       ))}
@@ -208,39 +230,44 @@ function Legend({ items }) {
   );
 }
 
+// Illumio Field names: Risk Red, Circuit Gold, Gold, Safeguard Green,
+// System Cyan. Illumio Orange is the brand accent and never appears here.
 const LEGEND = {
-  severity: [["high finding", C.red], ["medium finding", C.orange], ["low finding", C.amber]],
-  policy: [["allowed", C.green], ["potentially blocked", C.orange], ["blocked", C.red], ["partial = mix unverified, summary was capped", C.amber]],
-  rows: [["row tint: endpoint has a high finding", C.redLight], ["row tint: medium finding", C.orangeLight], ["no tint: low or none", C.white]],
-  ports: [["port in red bold = admin port (22, 3389, 445, 1433 ...)", C.red, "text"], ["black = other port", C.navy, "text"]],
-  classes: [["private address", C.tealLight], ["public address", C.orangeLight], ["noise class", C.gray100]],
+  severity: [["high finding: Risk Red", C.red], ["medium finding: Circuit Gold", C.orange], ["low finding: Gold", C.amber]],
+  policy: [["allowed: Safeguard Green", C.green], ["potentially blocked: Circuit Gold", C.orange], ["blocked: Risk Red", C.red], ["partial = mix unverified, summary was capped", C.amber]],
+  rows: [["row tint: endpoint has a high finding (Risk Red 10%)", C.redLight], ["row tint: medium finding (Circuit Gold 10%)", C.orangeLight], ["grey banding: no meaning", BAND]],
+  ports: [["port in Risk Red bold = admin port (22, 3389, 445, 1433 ...)", C.red, "text"], ["slate = other port", C.slate, "text"]],
+  classes: [["private address: System Cyan tint", C.tealLight], ["public address: Circuit Gold border on its tint", C.orange, "outline"], ["noise class: grey", C.gray100]],
   findingsBadge: [["finding badge colour = that finding's severity", C.red]],
-  subnets: [["bar colour = worst finding among the subnet's unknown hosts", C.red], ["medium", C.orange], ["low", C.amber]],
-  timeline: [["allowed", C.green], ["potentially blocked", C.orange], ["blocked", C.red], ["spike bucket (>= 3x median)", C.red, "outline"], ["3x median threshold", C.red, "dash"]],
-  suggestions: [["create-workload", C.teal], ["create-iplist", C.green], ["create-deny-rule", C.red], ["VEN", C.navy], ["narrow a rule", C.orange]],
+  subnets: [["bar colour = worst finding among the subnet's unknown hosts: high Risk Red", C.red], ["medium Circuit Gold", C.orange], ["low Gold", C.amber]],
+  timeline: [["allowed: Safeguard Green", C.green], ["potentially blocked: Circuit Gold", C.orange], ["blocked: Risk Red", C.red], ["spike bucket (>= 3x median)", C.red, "outline"], ["3x median threshold", C.red, "dash"]],
+  suggestions: [["create-workload: System Cyan", C.teal], ["create-iplist: Safeguard Green", C.green], ["create-deny-rule: Risk Red", C.red], ["VEN: Server Slate", C.slate], ["narrow a rule: Circuit Gold", C.orange]],
 };
 
 // Global key next to the tab bar: the colours that recur on every tab.
 function ColourKey() {
   const items = [
-    ["high · blocked", C.red, C.white], ["medium · potentially blocked", C.orange, C.white],
-    ["low", C.amber, C.amberDark], ["allowed · ok", C.green, C.white], ["info", C.teal, C.white],
+    ["high · blocked: Risk Red", C.red, C.white], ["medium · potentially blocked: Circuit Gold", C.orange, C.slate],
+    ["low: Gold", C.amber, C.slate], ["allowed · ok: Safeguard Green", C.green, C.white], ["info: System Cyan", C.teal, C.white],
   ];
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: C.gray500 }}>
-      <span style={{ fontWeight: 700, marginRight: 2 }}>Colour key</span>
+      <span style={{ fontWeight: 600, marginRight: 2 }}>Colour key</span>
       {items.map(([l, bg, color]) => <Badge key={l} label={l} bg={bg} color={color} />)}
-      <span>· grey strips and borders mean nothing · each section has its own legend</span>
+      <span>· grey strips, borders and banding mean nothing · the orange tab underline is the brand accent, not a status · each section has its own legend</span>
     </div>
   );
 }
 
+// Text tabs; the active tab carries a 2px Illumio Orange underline, the one
+// brand accent on the page. Not a status colour.
 function TabBar({ tabs, active, onChange }) {
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: C.gray100, padding: 6, borderRadius: 999, width: "fit-content" }}>
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", borderBottom: `1px solid ${C.gray200}` }}>
       {tabs.map((t) => (
-        <button key={t} onClick={() => onChange(t)} style={{ border: "none", cursor: "pointer", padding: "7px 14px", borderRadius: 999, fontFamily: font,
-          fontWeight: 700, fontSize: 13, background: active === t ? C.navy : "transparent", color: active === t ? C.white : C.gray700 }}>
+        <button key={t} onClick={() => onChange(t)} style={{ border: "none", cursor: "pointer", padding: "8px 12px", fontFamily: FONT, background: "transparent",
+          fontWeight: active === t ? 600 : 500, fontSize: 13, color: active === t ? C.slate : C.gray500, marginBottom: -1,
+          borderBottom: `2px solid ${active === t ? C.accent : "transparent"}` }}>
           {t}
         </button>
       ))}
@@ -253,11 +280,11 @@ function TabBar({ tabs, active, onChange }) {
 // difference into them.
 function Section({ title, children, right }) {
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: 16, marginTop: 16 }}>
+    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, padding: 16, marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ width: 4, height: 18, borderRadius: 2, background: C.gray300, display: "inline-block" }} />
-          <span style={{ fontWeight: 800, color: C.navy, fontSize: 15 }}>{title}</span>
+          <span style={{ fontWeight: 600, color: C.slate, fontSize: 15 }}>{title}</span>
         </div>
         {right}
       </div>
@@ -273,18 +300,18 @@ function PolicyBar({ policy }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
       <div title={`allowed ${fmt(a)} · potentially blocked ${fmt(p)} · blocked ${fmt(b)}`}
-        style={{ display: "flex", height: 10, width: 110, borderRadius: 5, overflow: "hidden", background: C.gray200 }}>
+        style={{ display: "flex", height: 10, width: 110, overflow: "hidden", background: C.gray200 }}>
         {seg(a, C.green)}{seg(p, C.orange)}{seg(b, C.red)}
       </div>
-      {policy.partial && <Badge label="partial" bg={C.amber} color={C.amberDark} />}
+      {policy.partial && <Badge label="partial" bg={C.amber} color={C.slate} />}
     </div>
   );
 }
 
 function Chip({ label, active, onClick }) {
   return (
-    <button onClick={onClick} style={{ cursor: "pointer", border: `1px solid ${active ? C.navy : C.gray300}`, background: active ? C.navy : C.white,
-      color: active ? C.white : C.gray700, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 600, fontFamily: font }}>
+    <button onClick={onClick} style={{ cursor: "pointer", border: `1px solid ${active ? C.slate : C.gray300}`, background: active ? C.slate : C.white,
+      color: active ? C.white : C.gray700, padding: "4px 10px", fontSize: 12, fontWeight: 500, fontFamily: FONT }}>
       {label}
     </button>
   );
@@ -312,7 +339,7 @@ function DataTable({ columns, rows, rowTint, search, setSearch, limit = 50, empt
     <div>
       {setSearch && (
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search"
-          style={{ fontFamily: font, fontSize: 13, padding: "7px 10px", border: `1px solid ${C.gray300}`, borderRadius: 8, width: 240, marginBottom: 10 }} />
+          style={{ fontFamily: FONT, fontSize: 13, padding: "7px 10px", border: `1px solid ${C.gray300}`, width: 240, marginBottom: 10 }} />
       )}
       <div style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
@@ -320,23 +347,26 @@ function DataTable({ columns, rows, rowTint, search, setSearch, limit = 50, empt
             <tr>
               {columns.map((c) => (
                 <th key={c.key} onClick={() => c.sortable !== false && setSort((s) => ({ key: c.key, dir: s.key === c.key ? -s.dir : -1 }))}
-                  style={{ textAlign: "left", padding: "8px 10px", color: C.gray500, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4,
-                    borderBottom: `2px solid ${C.gray200}`, cursor: c.sortable === false ? "default" : "pointer", whiteSpace: "nowrap" }}>
+                  style={{ textAlign: "left", padding: "8px 10px", background: C.slate, color: C.white, fontSize: 11, fontWeight: 600, textTransform: "uppercase",
+                    letterSpacing: 0.4, cursor: c.sortable === false ? "default" : "pointer", whiteSpace: "nowrap" }}>
                   {c.label}{sort.key === c.key ? (sort.dir < 0 ? " ↓" : " ↑") : ""}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {shown.slice(0, limit).map((row, i) => (
-              <tr key={i} style={{ background: rowTint ? rowTint(row) : "transparent" }}>
+            {shown.slice(0, limit).map((row, i) => {
+              const tint = rowTint ? rowTint(row) : "transparent";
+              return (
+              <tr key={i} style={{ background: tint !== "transparent" ? tint : i % 2 ? BAND : "transparent" }}>
                 {columns.map((c) => (
-                  <td key={c.key} style={{ padding: "8px 10px", borderBottom: `1px solid ${C.gray100}`, verticalAlign: "top", color: C.navy }}>
+                  <td key={c.key} style={{ padding: "8px 10px", borderBottom: `1px solid ${C.gray200}`, verticalAlign: "top", color: C.text }}>
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -351,10 +381,10 @@ function BarList({ items, onPick, picked }) {
     <div style={{ display: "grid", gap: 8 }}>
       {items.map((i) => (
         <div key={i.key} onClick={() => onPick && onPick(i.key)} style={{ cursor: onPick ? "pointer" : "default" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.navy, fontWeight: picked === i.key ? 800 : 600 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.slate, fontWeight: picked === i.key ? 600 : 500 }}>
             <span>{i.label}</span><span style={{ color: C.gray500 }}>{i.value}</span>
           </div>
-          <div style={{ height: 10, background: C.gray100, borderRadius: 5, overflow: "hidden" }}>
+          <div style={{ height: 10, background: C.gray100, overflow: "hidden" }}>
             <div style={{ width: `${(100 * i.value) / max}%`, height: "100%", background: i.color || C.red }} />
           </div>
         </div>
@@ -370,7 +400,7 @@ function TimelineChart({ series, spikes, bucket }) {
   const y = (v) => pad.t + (h - pad.t - pad.b) * (1 - v / max);
   const thr = spikes ? y(spikes.threshold) : null;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto", fontFamily: font }}>
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto", fontFamily: FONT }}>
       {[0, 0.5, 1].map((f) => (
         <g key={f}>
           <line x1={pad.l} x2={w - pad.r} y1={y(max * f)} y2={y(max * f)} stroke={C.gray200} />
@@ -405,7 +435,7 @@ function TimelineChart({ series, spikes, bucket }) {
 }
 
 const endpointColumns = (isDst) => [
-  { key: "ip", label: "Address", render: (r) => <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 700 }}>{r.ip}</span> },
+  { key: "ip", label: "Address", render: (r) => <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontWeight: 600 }}>{r.ip}</span> },
   { key: "fqdn", label: "FQDN", render: (r) => r.fqdn || <span style={{ color: C.gray400 }}>–</span> },
   { key: "addressClass", label: "Class", render: (r) => <ClassChip c={r.addressClass} /> },
   { key: "ipLists", label: "IP list", sortable: false, render: (r) => (r.ipLists.length ? r.ipLists.join(", ") : <span style={{ color: C.gray400 }}>none</span>) },
@@ -415,7 +445,7 @@ const endpointColumns = (isDst) => [
   { key: "ports", label: "Ports", sortable: false, render: (r) => (
       <span>
         {r.ports.map((p, i) => (
-          <span key={i} style={{ fontWeight: p.admin ? 800 : 400, color: p.admin ? C.red : C.navy, marginRight: 6, fontFamily: "ui-monospace, Menlo, monospace" }}>{p.port}/{p.proto}</span>
+          <span key={i} style={{ fontWeight: p.admin ? 800 : 400, color: p.admin ? C.red : C.slate, marginRight: 6, fontFamily: "ui-monospace, Menlo, monospace" }}>{p.port}/{p.proto}</span>
         ))}
         {r.portCount > r.ports.length ? <span style={{ color: C.gray500 }}>+{r.portCount - r.ports.length}</span> : null}
       </span>) },
@@ -461,7 +491,7 @@ function EndpointTab({ rows, isDst }) {
       <Legend items={[...LEGEND.rows, ...LEGEND.ports, ...LEGEND.policy, ...LEGEND.classes, ...LEGEND.findingsBadge]} />
       {isDst && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 700, color: C.navy, fontSize: 13 }}>Collapsed ranges <span style={{ color: C.gray500, fontWeight: 400 }}>(ranges, not hosts, not in the counts)</span></div>
+          <div style={{ fontWeight: 600, color: C.slate, fontSize: 13 }}>Collapsed ranges <span style={{ color: C.gray500, fontWeight: 400 }}>(ranges, not hosts, not in the counts)</span></div>
           {collapsedRanges.length ? collapsedRanges.map((c, i) => (
             <div key={i} style={{ fontSize: 13, color: C.gray700, marginTop: 4 }}>
               {c.label} · {c.port}/{c.proto} · {c.policy} · {fmt(c.connections)} connections
@@ -491,25 +521,25 @@ function Overview({ status }) {
         <KPICard label="Noise endpoints" value={summaryKPIs.noiseEndpoints} subtitle="link-local, multicast, broadcast" />
       </div>
       <Section title="Findings by severity">
-        <div style={{ display: "flex", height: 14, borderRadius: 7, overflow: "hidden", background: C.gray100 }}>
+        <div style={{ display: "flex", height: 14, overflow: "hidden", background: C.gray100 }}>
           <div style={{ width: `${(100 * summaryKPIs.high) / total}%`, background: C.red }} />
           <div style={{ width: `${(100 * summaryKPIs.medium) / total}%`, background: C.orange }} />
           <div style={{ width: `${(100 * summaryKPIs.low) / total}%`, background: C.amber }} />
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13, color: C.gray700 }}>
-          <span><b style={{ color: C.red }}>{summaryKPIs.high}</b> high</span>
-          <span><b style={{ color: C.orange }}>{summaryKPIs.medium}</b> medium</span>
-          <span><b style={{ color: C.amberDark }}>{summaryKPIs.low}</b> low</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={C.red} /><b>{summaryKPIs.high}</b> high</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={C.orange} /><b>{summaryKPIs.medium}</b> medium</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={C.amber} /><b>{summaryKPIs.low}</b> low</span>
           <span style={{ color: C.gray500 }}>{fmt(summaryKPIs.connectionsUnknown)} connections involve unknown endpoints</span>
         </div>
-        <Legend items={[...LEGEND.severity, ["KPI card top border: red or orange only when a risk KPI is above zero; grey otherwise", C.gray300]]} />
+        <Legend items={[...LEGEND.severity, ["KPI card top border: Risk Red or Circuit Gold only when a risk KPI is above zero; grey otherwise", C.gray300]]} />
       </Section>
       <Section title="Top issues">
         {top.length ? top.map((f, i) => (
           <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "8px 0", borderBottom: i < top.length - 1 ? `1px solid ${C.gray100}` : "none" }}>
             <SeverityBadge s={f.severity} />
             <div>
-              <div style={{ fontWeight: 700, color: C.navy, fontSize: 14 }}>{f.id} {f.title} · <span style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{f.endpoint}</span></div>
+              <div style={{ fontWeight: 600, color: C.slate, fontSize: 14 }}>{f.id} {f.title} · <span style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>{f.endpoint}</span></div>
               <div style={{ color: C.gray700, fontSize: 13 }}>{f.numbers}</div>
             </div>
           </div>
@@ -542,23 +572,23 @@ function FindingsTab() {
           {rows.map((f, i) => {
             const ep = [...unknownSources, ...unknownDestinations].find((e) => e.ip === f.endpoint || e.fqdn === f.endpoint);
             return (
-              <div key={i} style={{ border: `1px solid ${C.gray200}`, borderLeft: `5px solid ${sev[f.severity].bg}`, borderRadius: 10, padding: "10px 14px", background: C.white }}>
+              <div key={i} style={{ border: `1px solid ${C.gray200}`, borderLeft: `5px solid ${sev[f.severity].bg}`, padding: "10px 14px", background: C.white }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <SeverityBadge s={f.severity} />
-                  <span style={{ fontWeight: 800, color: C.navy }}>{f.id} {f.title}</span>
-                  <span style={{ fontFamily: "ui-monospace, Menlo, monospace", color: C.navy }}>{f.endpoint}</span>
+                  <span style={{ fontWeight: 600, color: C.slate }}>{f.id} {f.title}</span>
+                  <span style={{ fontFamily: "ui-monospace, Menlo, monospace", color: C.slate }}>{f.endpoint}</span>
                   {ep && <ClassChip c={ep.addressClass} />}
                   <span style={{ color: C.gray500, fontSize: 12 }}>{f.direction}</span>
                 </div>
                 <div style={{ color: C.gray700, fontSize: 13, marginTop: 6 }}>{f.numbers}</div>
                 {f.detail && <div style={{ color: C.gray500, fontSize: 13, marginTop: 2 }}>{f.detail}</div>}
-                {f.suggestionId && <div style={{ fontSize: 12, color: C.greenDark, marginTop: 6, fontWeight: 700 }}>→ suggestion {f.suggestionId}</div>}
+                {f.suggestionId && <div style={{ fontSize: 12, color: C.greenDark, marginTop: 6, fontWeight: 600 }}>→ suggestion {f.suggestionId}</div>}
               </div>
             );
           })}
         </div>
       ) : <div style={{ color: C.gray500, fontSize: 13 }}>No findings match</div>}
-      <Legend items={[["card left border and badge = finding severity: high", C.red], ["medium", C.orange], ["low", C.amber], ...LEGEND.classes]} />
+      <Legend items={[["card left border and badge = finding severity: high Risk Red", C.red], ["medium Circuit Gold", C.orange], ["low Gold", C.amber], ...LEGEND.classes]} />
     </Section>
   );
 }
@@ -577,9 +607,9 @@ function SubnetsTab() {
     <Section title="Where the inventory gaps are" right={<span style={{ color: C.gray500, fontSize: 12 }}>managed prefixes with unknown hosts</span>}>
       {items.length ? <BarList items={items} onPick={setPicked} picked={picked} /> : <div style={{ color: C.gray500, fontSize: 13 }}>No unknown hosts inside managed subnets</div>}
       {sel && (
-        <div style={{ marginTop: 14, background: C.gray50, borderRadius: 10, padding: 12 }}>
-          <div style={{ fontWeight: 700, color: C.navy, fontSize: 13 }}>{sel.prefix}</div>
-          <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, color: C.navy, marginTop: 4 }}>{sel.unknownIps.join("  ")}</div>
+        <div style={{ marginTop: 14, background: C.gray100, border: `1px solid ${C.gray200}`, padding: 12 }}>
+          <div style={{ fontWeight: 600, color: C.slate, fontSize: 13 }}>{sel.prefix}</div>
+          <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, color: C.slate, marginTop: 4 }}>{sel.unknownIps.join("  ")}</div>
         </div>
       )}
       <Legend items={[...LEGEND.subnets, ["bar length = number of unknown hosts in the prefix; click a bar to list them", C.gray300]]} />
@@ -588,21 +618,22 @@ function SubnetsTab() {
 }
 
 function SuggestionsTab() {
-  const kindColor = { "create-workload": C.teal, "create-iplist": C.green, "create-deny-rule": C.red, ven: C.navy, "narrow-rule": C.orange };
+  const kindStyle = { "create-workload": { bg: C.teal, color: C.white }, "create-iplist": { bg: C.green, color: C.white }, "create-deny-rule": { bg: C.red, color: C.white },
+    ven: { bg: C.slate, color: C.white }, "narrow-rule": { bg: C.orange, color: C.slate } };
   return (
     <Section title="Suggested objects (not created)"
-      right={<Badge label="NOTHING ON THIS TAB HAS BEEN EXECUTED" bg={C.amber} color={C.amberDark} />}>
+      right={<Badge label="NOTHING ON THIS TAB HAS BEEN EXECUTED" bg={C.amber} color={C.slate} />}>
       {suggestions.length ? (
         <div style={{ display: "grid", gap: 10 }}>
           {suggestions.map((s) => (
-            <div key={s.id} style={{ border: `1px solid ${C.gray200}`, borderRadius: 10, padding: "10px 14px" }}>
+            <div key={s.id} style={{ border: `1px solid ${C.gray200}`, padding: "10px 14px" }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <Badge label={s.kind} bg={kindColor[s.kind] || C.gray400} color={C.white} />
-                <span style={{ fontWeight: 800, color: C.navy }}>{s.id} {s.title}</span>
+                <Badge label={s.kind} {...(kindStyle[s.kind] || { bg: C.gray400, color: C.white })} />
+                <span style={{ fontWeight: 600, color: C.slate }}>{s.id} {s.title}</span>
                 <span style={{ color: C.gray500, fontSize: 12 }}>answers {s.findings.join(", ")}</span>
               </div>
               {s.callPlan && (
-                <pre style={{ background: C.gray50, border: `1px solid ${C.gray200}`, borderRadius: 8, padding: 10, fontSize: 12, marginTop: 8, overflowX: "auto", whiteSpace: "pre-wrap" }}>{s.callPlan}</pre>
+                <pre style={{ background: C.gray100, border: `1px solid ${C.gray200}`, padding: 10, fontSize: 12, marginTop: 8, overflowX: "auto", whiteSpace: "pre-wrap", fontFamily: "ui-monospace, Menlo, monospace" }}>{s.callPlan}</pre>
               )}
             </div>
           ))}
@@ -620,13 +651,13 @@ function DeepDiveTab() {
     <div>
       <Section title={`Deep dive: ${d.ip} as ${d.direction}`}
         right={<span style={{ fontSize: 12, color: C.gray500 }}>bucket {d.bucket} · effective {d.effectiveBucket}</span>}>
-        {d.resolutionNote && <div style={{ background: C.amber, color: C.amberDark, borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 10 }}>{d.resolutionNote}</div>}
+        {d.resolutionNote && <div style={{ background: C.amberLight, borderLeft: `4px solid ${C.amber}`, color: C.slate, padding: 10, fontSize: 13, marginBottom: 10 }}>{d.resolutionNote}</div>}
         <TimelineChart series={d.series} spikes={d.spikes} bucket={d.bucket} />
         <div style={{ fontSize: 13, color: C.gray700, marginTop: 6 }}>
           {d.spikes.worst ? <span>Worst spike <b style={{ color: C.red }}>{d.spikes.worst.label}, {d.spikes.worst.multiple}x median</b> ({d.spikes.median} flows)</span> : "No spike"}
-          {d.spikes.caveat && <div style={{ color: C.amberDark, marginTop: 4 }}>{d.spikes.caveat}</div>}
+          {d.spikes.caveat && <div style={{ background: C.amberLight, borderLeft: `4px solid ${C.amber}`, color: C.slate, padding: "6px 10px", marginTop: 6 }}>{d.spikes.caveat}</div>}
         </div>
-        <Legend items={LEGEND.timeline} />
+        <Legend items={[...LEGEND.timeline, ["Gold bar and tint: resolution note or spike caveat", C.amber]]} />
       </Section>
       <Section title="Peer x port x policy">
         <DataTable columns={[
@@ -651,13 +682,14 @@ export default function UnknownEndpointsDashboard() {
   const subtitle = `${scope.windowStart} to ${scope.windowEnd} (${scope.days} days), direction ${scope.direction}, ${scope.scopeLabels}, ${scope.queries} PCE queries` +
     (flags.length ? `, ${flags.join(", ")}` : ", complete data") + ". Policy objects read from draft.";
   return (
-    <div style={{ fontFamily: font, background: C.gray50, minHeight: "100vh", padding: 20, color: C.navy }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <div style={{ fontFamily: FONT, background: C.gray50, minHeight: "100vh", padding: 20, color: C.text }}>
+      <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <div style={{ maxWidth: 1240, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 12, color: C.green, fontWeight: 800, letterSpacing: 1 }}>ILLUMIO</div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>Unknown endpoints · {scope.pce}</div>
+            <div style={{ fontSize: 11, color: C.slate, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Illumio · Unknown endpoints</div>
+            <div style={{ fontSize: 28, fontWeight: 300, color: C.slate, lineHeight: 1.2 }}>Unknown endpoints · {scope.pce}</div>
+            <div style={{ width: 48, height: 3, background: C.accent, marginTop: 6 }} />
           </div>
           <div style={{ fontSize: 12, color: C.gray500 }}>generated {scope.generatedAt}</div>
         </div>

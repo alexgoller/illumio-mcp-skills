@@ -106,53 +106,103 @@ The dashboard is a single default-exported React component with these sections:
 
 ### Design System
 
-Light mode, clean, not too dark. Use the Illumio brand palette:
+Light mode, clean, not too dark. The dashboard follows Illumio Field.
+
+### Illumio Field
+
+Every rendered output of every skill in this repo follows the Illumio Field
+design system, which implements the visual identity of the Illumio Brand
+Guidelines (November 2024). Visual identity only; no brand messaging.
+
+- **Grounds.** Page on Zero Trust Tan `#F7F4EE`; cards, panels and tables
+  white; square corners (0, at most 2px on small tags); 1px borders
+  `#D6D7D7`; table banding `#EAEBEB`.
+- **Text.** Server Slate `#313638` for headings and primary text, `#464A4C`
+  for body, `#64686A` for captions and labels, `#6F7274` the lightest
+  colour for small text on white. Page title in weight 300 (Light);
+  eyebrows and section labels in Server Slate SemiBold caps; emphasis
+  SemiBold.
+- **Font.** `"FK Grotesk", Montserrat, Arial, sans-serif`; load Montserrat
+  300, 400, 500 and 600 from Google Fonts.
+- **Accent.** Illumio Orange `#FF5500` is the one brand accent: the active
+  tab underline, the rule under the page title, a "today" or "new" marker.
+  As text only at 24px and up or bold on white; never on tan (contrast
+  1.1); never as a status colour.
+- **Status colours**, for meaning only, each with a legend where it
+  appears: Risk Red `#BE122F` critical, failed, blocked; Safeguard Green
+  `#166644` pass, allowed, enforced, healthy; Circuit Gold `#F97607`
+  warning, high; Gold `#FFA22F` medium; System Cyan `#2D454C` info,
+  selective, in progress. Red, green and cyan may be text on white; gold
+  is a fill, swatch, border or bar with slate text, never small text.
+  Row and badge tints are the status colour at 10% over white
+  (`rgba(190,18,47,0.10)` and so on), never a separate hue.
+- **Tables.** Server Slate header row with white text, light banding,
+  hairline borders.
+- **Decoration.** None in colour: section strips, dividers and inactive
+  elements are slate greys.
+
+Palette constants, declared once at the top of the file:
 
 ```javascript
 const C = {
-  green: "#00C48C",       // Illumio primary
-  greenLight: "#E8FAF3",  // Success backgrounds
-  greenDark: "#00A876",   // Success text
-  teal: "#00B4D8",        // Selective / info accent
-  tealLight: "#E5F7FB",   // Info backgrounds
-  navy: "#1A1F36",        // Primary text, headers
-  orange: "#FF6B35",      // Warnings
-  orangeLight: "#FFF3ED", // Warning backgrounds
-  red: "#E63946",         // Critical / failures
-  redLight: "#FDE8EA",    // Critical backgrounds
-  gray50: "#F9FAFB",      // Page background
-  gray100: "#F3F4F6",     // Subtle backgrounds
-  gray200: "#E5E7EB",     // Borders
-  gray300: "#D1D5DB",
-  gray400: "#9CA3AF",     // Muted text
-  gray500: "#6B7280",     // Secondary text
-  gray700: "#374151",     // Strong secondary text
+  accent: "#FF5500",          // Illumio Orange: active tab underline, title rule, today/new marker; never a status
+  slate: "#313638",           // Server Slate: headings, primary text, table header rows
+  text: "#464A4C",            // body text
+  muted: "#64686A",           // captions, labels
+  green: "#166644",           // Safeguard Green: pass, allowed, enforced, healthy
+  greenLight: "rgba(22,102,68,0.10)",
+  greenDark: "#11432F",
+  teal: "#2D454C",            // System Cyan: info, selective, in progress
+  tealLight: "rgba(45,69,76,0.10)",
+  orange: "#F97607",          // Circuit Gold 110: warning, high (fills, swatches, bars; slate text on its tint)
+  orangeLight: "rgba(249,118,7,0.10)",
+  amber: "#FFA22F",           // Circuit Gold 100: medium
+  amberLight: "rgba(255,162,47,0.12)",
+  red: "#BE122F",             // Risk Red: critical, failed, blocked
+  redLight: "rgba(190,18,47,0.10)",
+  gray50: "#F7F4EE",          // page ground: Zero Trust Tan
+  gray100: "#F5F5F5",         // subtle fills
+  gray200: "#D6D7D7",         // borders
+  gray300: "#C1C3C3",
+  gray400: "#6F7274",         // muted text, minimum for small text on white
+  gray500: "#64686A",         // secondary text
+  gray700: "#464A4C",         // strong secondary text
   white: "#FFFFFF",
 };
+const FONT = '"FK Grotesk", Montserrat, Arial, sans-serif';
+// <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet" />
 ```
 
-Use Google Fonts `DM Sans` (weights 400–800) loaded via `<link>` in the component body.
+Load Montserrat (weights 300, 400, 500 and 600) via the `<link>` above, rendered in the component body, and set `fontFamily: FONT` on the root element so every child inherits it.
+
+Applied to this dashboard:
+- **Surfaces**: page background `C.gray50` (Zero Trust Tan); cards, KPI tiles, tables and panels white with a 1px `C.gray200` border and `borderRadius: 0`; buttons square; tags and badges square with `borderRadius` of at most 2px.
+- **Tables**: header row `C.slate` with white text; row banding `#EAEBEB`; hairline `C.gray200` borders.
+- **Headings**: page title in `C.slate` at weight 300 with a 2px `C.accent` rule under it; section titles `C.slate` SemiBold (600); eyebrows `C.slate` SemiBold in caps; body `C.text`; captions and labels `C.muted`.
+- **Illumio Orange (`C.accent`)** is an accent, never a status: it marks the active tab and the title rule and appears nowhere else.
 
 ### Status color mapping
 
 Apply consistently everywhere (badges, cells, backgrounds):
-- **critical / fail / high risk**: Red (`E63946`) bg, white text
-- **high**: Orange (`FF6B35`) bg, white text
-- **medium / warning**: Amber (`#FEF3C7`) bg, dark amber text
-- **low / pass / enforced**: Green (`00C48C`) bg, white text
-- **info / in progress**: Teal (`00B4D8`) bg, white text
+- **critical / fail / high risk**: Risk Red (`C.red`) bg, white text
+- **high / warning**: Circuit Gold (`C.orange`) fill, `C.slate` text (gold is a fill or swatch, never small gold text)
+- **medium**: Gold (`C.amber`) fill, `C.slate` text
+- **low / pass / enforced**: Safeguard Green (`C.green`) bg, white text
+- **info / in progress / selective**: System Cyan (`C.teal`) bg, white text
+- **row and cell tints**: the matching `*Light` value (the status colour at 10% over white) with `C.slate` text
+- **grey** (`C.gray200`, `C.gray300`, `C.gray400`) means nothing
 
 ### Colour legends (required)
 
 Colour carries meaning only, and every place it is used explains itself:
-- A **colour key** next to the tab bar on every tab: critical / fail / high risk, high, medium / warning, low / pass / enforced, info / in progress, plus the sentence "grey borders and strips mean nothing".
-- A **`Legend` component** (swatch plus text) at the bottom of every section that uses colour, listing exactly the colours used there: the enforcement donut segments; graph node fill by tier and the red override for bridge nodes; link colour by risk level and width for high risk; lateral movement bar fills (bridge, high reachability, low) and the BRIDGE badge; port card severities; violation row tints; unmanaged traffic anomaly colours.
+- A **colour key** next to the tab bar on every tab: Risk Red critical / fail / high risk, Circuit Gold high / warning, Gold medium, Safeguard Green low / pass / enforced, System Cyan info / in progress / selective, plus the sentence "grey borders and strips mean nothing".
+- A **`Legend` component** (swatch plus text) at the bottom of every section that uses colour, listing exactly the colours used there: the enforcement donut segments; graph node fill by tier and the Risk Red override for bridge nodes; link colour by risk level and width for high risk; lateral movement bar fills (bridge, high reachability, low) and the BRIDGE tag; port card severities; violation row tints; unmanaged traffic anomaly colours.
 - Section heading accents are one neutral grey; no per-section colour.
 - Keep the legend wording in one `LEGEND` constant so every tab says the same thing.
 
 ### Tab Structure
 
-Use a pill-style tab bar with 5 tabs:
+Use a text tab bar with 5 tabs. Tabs are plain `C.muted` labels; the active tab is `C.slate` SemiBold with a 2px Illumio Orange (`C.accent`) underline. No fills, no outlines, square everywhere.
 
 1. **Overview** — KPI cards, enforcement donut, compliance cards, app status table
 2. **Network Graph** — D3 force-directed graph with risk filter, legend, detail panel, lateral movement bars
@@ -164,13 +214,13 @@ Use a pill-style tab bar with 5 tabs:
 
 Build these reusable components:
 
-- **`Badge`**: Pill-shaped label with `color` + `bg` props
+- **`Badge`**: Square tag (`borderRadius` at most 2px) with `color` + `bg` props
 - **`RiskBadge`**: Pre-mapped risk level badge
 - **`ModeBadge`**: Pre-mapped enforcement mode badge (visibility_only displays as "vis only")
-- **`KPI`**: Card with label, large value, subtitle, accent color
-- **`Section`**: Heading with icon, optional accent bar, children
-- **`TabBar`**: Pill-style tab switcher
-- **`EnforcementDonut`**: SVG donut chart with arc paths and legend
+- **`KPI`**: Square white card with 1px `C.gray200` border; eyebrow label in `C.slate` SemiBold caps, large value, subtitle, accent color (a status colour only when the value calls for attention, `C.gray300` otherwise)
+- **`Section`**: Heading in `C.slate` SemiBold with icon, optional accent bar in neutral grey, children
+- **`TabBar`**: Text tab switcher with the 2px `C.accent` underline on the active tab
+- **`EnforcementDonut`**: SVG donut chart with arc paths and legend; full = Safeguard Green (`C.green`), selective = System Cyan (`C.teal`), visibility_only = Circuit Gold (`C.orange`)
 - **`NetworkGraph`**: D3 force-directed graph (see below)
 
 ### Network Graph Specification
@@ -187,10 +237,10 @@ The graph is the centerpiece. Build it as a separate `NetworkGraph` component:
 
 **Node rendering**:
 - Circle radius by tier: core=18, shared=15, endpoint=12, standard=10
-- Circle fill by tier: core=red, shared=orange, endpoint=teal, standard=gray400
-- Bridge nodes override to red fill regardless of tier
-- Text label below node: **`${d.app} (${d.env})`** — always the tuple
-- Font: DM Sans, 9px, gray700
+- Circle fill by tier: core = Risk Red (`C.red`), shared = Circuit Gold (`C.orange`), endpoint = System Cyan (`C.teal`), standard = `C.gray400`
+- Bridge nodes override to Risk Red fill regardless of tier
+- Text label below node: **`${d.app} (${d.env})`**, always the tuple
+- Font: `FONT`, 9px, `C.gray700`
 
 **Link rendering**:
 - Stroke color by risk level
@@ -206,21 +256,21 @@ The graph is the centerpiece. Build it as a separate `NetworkGraph` component:
 
 **Detail panel** (shown below graph when a node is clicked):
 - Header: `app (env)` with close button
-- Grid: Infra Score, Tier, Bridge (YES in red / No in green), Reachable count
-- Connected flows: List of flow chips showing `→ app (env) :port` with risk-colored backgrounds
+- Grid: Infra Score, Tier, Bridge (YES in Risk Red / No in Safeguard Green), Reachable count
+- Connected flows: List of square flow chips showing `→ app (env) :port` with risk-tinted backgrounds (the `*Light` values) and `C.slate` text
 
 **Lateral movement bar chart** (below graph detail):
-- Horizontal bars showing reachable/22 ratio
-- Gradient fills: bridge nodes = red→orange, high reachability = orange→amber, low = teal→green
-- Bridge nodes get a red "BRIDGE" badge
+- Horizontal bars showing reachable/22 ratio, square ends
+- Flat fills: bridge nodes = Risk Red (`C.red`), high reachability = Circuit Gold (`C.orange`), low = Safeguard Green (`C.green`); track `C.gray100`
+- Bridge nodes get a Risk Red "BRIDGE" tag
 - Label: `app (env)` — always the tuple, no separate env column
 
 ### Violations Tab (Conditional)
 
 Only show this tab if the user provided custom security rules of thumb. Structure:
-- Red alert banner summarizing the total violation count
-- Table sorted by connections descending, with red-tinted rows for critical severity
-- Green remediation card with numbered steps
+- Risk Red alert banner (`C.redLight` tint, 1px `C.red` left border, `C.slate` text) summarizing the total violation count
+- Table sorted by connections descending, with Risk Red tinted rows (`C.redLight`) for critical severity
+- Safeguard Green remediation card (`C.greenLight` tint, 1px `C.green` left border) with numbered steps
 
 ### Adaptation
 
@@ -248,6 +298,8 @@ Before finalizing, verify:
 - [ ] Risk filter buttons work and dim non-matching content
 - [ ] Donut chart segments add up to total workloads
 - [ ] All status badges use correct color mapping
+- [ ] Illumio Field surfaces: page on `C.gray50`, white cards with 1px `C.gray200` borders, `C.slate` table headers with white text, Montserrat via `FONT`; no rounded corners anywhere (cards, tiles, tables and buttons at radius 0, tags at most 2px)
+- [ ] Illumio Orange (`C.accent`) appears only as the active tab underline and the title rule, never as a status
 - [ ] Colour key visible on every tab; every section that uses colour ends with a legend naming each colour, tint and badge
 - [ ] Tab switching works without losing state
 - [ ] No separate env columns anywhere — env is always part of the app tuple

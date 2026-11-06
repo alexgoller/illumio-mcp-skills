@@ -18,7 +18,7 @@ denies that do not show in traffic; and a short fix-first list:
   isolate these on demand, watch these;
 - the **risk report**: every exposure with the risk it carries, what was
   seen, the evidence, and the recommended action;
-- the **dashboard**, a single-file React artifact in the Illumio style,
+- the **dashboard**, a single-file React artifact in the Illumio Field style,
   whose first tab is the risk map.
 
 Every fix is a draft call plan marked `DO_NOT_CALL`; the skill creates

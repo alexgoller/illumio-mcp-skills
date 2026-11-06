@@ -1,9 +1,10 @@
 # Dashboard specification
 
 The dashboard is a single-file React component (`.jsx`) in the same style
-as the other Illumio dashboard skills: light mode, Illumio palette, DM
-Sans, pill tabs, inline styles, every number embedded as a constant. It
-shows the plan's numbers and nothing the plan does not have.
+as the other Illumio dashboard skills: light mode, the Illumio Field
+palette, Montserrat, square cards, text tabs with an Illumio Orange
+underline, inline styles, every number embedded as a constant. It shows
+the plan's numbers and nothing the plan does not have.
 
 `scripts/triage.py` writes `dashboard.jsx` itself: it takes
 `dashboard-example.jsx` next to this file as the template and replaces
@@ -16,40 +17,80 @@ and ship the plan and report without it.
 ## Conventions shared with the other dashboards
 
 - React with hooks, one default export, inline `style={{}}` only, no
-  external calls, DM Sans via a `<link>` in the component body, small
-  inline SVGs instead of a chart library.
-- Palette `C` (green `#00C48C`, teal `#00B4D8`, navy `#1A1F36`, orange
-  `#FF6B35`, red `#E63946`, amber `#FEF3C7`/`#92400E`, greys).
+  external calls, Montserrat (300, 400, 500, 600) via a `<link>` in the
+  component body, small inline SVGs instead of a chart library.
+- Palette `C` and `FONT` as in the Illumio Field section below: page
+  ground Zero Trust Tan, white square cards with 1px `C.gray200` borders,
+  table header rows Server Slate with white text, banding `#EAEBEB`,
+  page title in weight 300, section titles and eyebrows Server Slate
+  SemiBold caps, badges rounded at most 2px, no pills; the active tab
+  carries a 2px Illumio Orange underline and Illumio Orange appears
+  nowhere else.
 - **Colour carries meaning only.** Section strips are grey. KPI top
   borders are coloured only when the KPI is a risk and above zero. A
   colour key sits by the tab bar on every tab, and every section that
   uses colour ends with a `Legend` naming the colours used there. The
   legend texts live in one `LEGEND` constant.
 
+### Illumio Field
+
+Every rendered output of every skill in this repo follows the Illumio Field
+design system, which implements the visual identity of the Illumio Brand
+Guidelines (November 2024). Visual identity only; no brand messaging.
+
+- **Grounds.** Page on Zero Trust Tan `#F7F4EE`; cards, panels and tables
+  white; square corners (0, at most 2px on small tags); 1px borders
+  `#D6D7D7`; table banding `#EAEBEB`.
+- **Text.** Server Slate `#313638` for headings and primary text, `#464A4C`
+  for body, `#64686A` for captions and labels, `#6F7274` the lightest
+  colour for small text on white. Page title in weight 300 (Light);
+  eyebrows and section labels in Server Slate SemiBold caps; emphasis
+  SemiBold.
+- **Font.** `"FK Grotesk", Montserrat, Arial, sans-serif`; load Montserrat
+  300, 400, 500 and 600 from Google Fonts.
+- **Accent.** Illumio Orange `#FF5500` is the one brand accent: the active
+  tab underline, the rule under the page title, a "today" or "new" marker.
+  As text only at 24px and up or bold on white; never on tan (contrast
+  1.1); never as a status colour.
+- **Status colours**, for meaning only, each with a legend where it
+  appears: Risk Red `#BE122F` critical, failed, blocked; Safeguard Green
+  `#166644` pass, allowed, enforced, healthy; Circuit Gold `#F97607`
+  warning, high; Gold `#FFA22F` medium; System Cyan `#2D454C` info,
+  selective, in progress. Red, green and cyan may be text on white; gold
+  is a fill, swatch, border or bar with slate text, never small text.
+  Row and badge tints are the status colour at 10% over white
+  (`rgba(190,18,47,0.10)` and so on), never a separate hue.
+- **Tables.** Server Slate header row with white text, light banding,
+  hairline borders.
+- **Decoration.** None in colour: section strips, dividers and inactive
+  elements are slate greys.
+
 ## Colour mapping
 
 | Meaning | Colour |
 | --- | --- |
-| Block today (deny or override deny, ease 4 or more) | red |
-| This week (ringfence, deny after review, internal source to identify) | orange |
+| Block today (deny or override deny, ease 4 or more) | Risk Red |
+| This week (ringfence, deny after review, internal source to identify) | Circuit Gold (a fill with slate text, never gold text) |
 | Watch, isolate on demand: nothing drafted | grey |
-| allowed by a rule (the rule would stop it) | green |
-| allowed, no provisioned rule, on selective enforcement (a deny would catch it) | teal |
-| drafted, waiting for provisioning (policy tile, `DRAFTED` badge) | navy |
-| provisioned deny names it, reported allowed (policy tile, `PROVISIONED, REPORTED ALLOWED` badge) | red |
-| nothing drafted (policy tile) | orange |
-| potentially blocked (no allow rule covers them) | orange |
-| blocked (already stopped; the rule makes it stick) | red |
-| spike bucket in the baseline | red outline; 3x-median threshold a red dashed line |
-| runbook steps: the override deny step | red bold text; the provision step navy bold |
-| labelling readiness badge | red NOT READY (label first), orange PARTIAL, grey READY |
-| Risk map KPI top border | red = override denies not showing, orange = unmanaged admin-port sources, each only above zero |
-| Risk map grid and environment matrix cells | one navy tint in four steps: band 1 to 4 (percentile among the apps; square-root scale of allowed connections in the matrix); no tint = zero |
+| allowed by a rule (the rule would stop it) | Safeguard Green |
+| allowed, no provisioned rule, on selective enforcement (a deny would catch it) | System Cyan |
+| drafted, waiting for provisioning (policy tile, `DRAFTED` badge) | System Cyan |
+| provisioned deny names it, reported allowed (policy tile, `PROVISIONED, REPORTED ALLOWED` badge) | Risk Red |
+| nothing drafted (policy tile) | Circuit Gold |
+| potentially blocked (no allow rule covers them) | Circuit Gold |
+| blocked (already stopped; the rule makes it stick) | Risk Red |
+| spike bucket in the baseline | Risk Red outline; 3x-median threshold a Risk Red dashed line |
+| runbook steps: the override deny step | Risk Red bold text; the provision step System Cyan bold |
+| labelling readiness badge | Risk Red NOT READY (label first), Circuit Gold PARTIAL, grey READY |
+| Risk map KPI top border | Risk Red = override denies not showing, Circuit Gold = unmanaged admin-port sources, each only above zero |
+| Risk map grid and environment matrix cells | one Server Slate tint in four steps: band 1 to 4 (percentile among the apps; square-root scale of allowed connections in the matrix); no tint = zero |
 
-The decision bar uses green, teal, orange and red for allowed by a
-rule, allowed with no rule, potentially blocked and blocked; the first,
-third and fourth are the mapping of illumio-unknown-endpoints. Drift
-and fix-first text carry no colour.
+The decision bar uses Safeguard Green, System Cyan, Circuit Gold and
+Risk Red for allowed by a rule, allowed with no rule, potentially
+blocked and blocked; the first, third and fourth are the mapping of
+illumio-unknown-endpoints. Drift and fix-first text carry no colour.
+Illumio Orange is never a status colour; where the old amber pair was
+used for a medium or watch tint, use `C.amberLight` with `C.text`.
 
 ## Data constants
 
@@ -101,9 +142,9 @@ to the top 12; its bands are shown as shading, never as a number, and
 
 ## Banner
 
-- **RED** "N exposures to block today" when the today bucket is not empty
-- **AMBER** "N to fence or review this week" when only the week bucket has lines
-- **GREEN** "Nothing to draft" otherwise
+- **RISK RED** "N exposures to block today" when the today bucket is not empty
+- **CIRCUIT GOLD** (slate text) "N to fence or review this week" when only the week bucket has lines
+- **SAFEGUARD GREEN** "Nothing to draft" otherwise
 
 Subtitle: window, production environments, crown jewels, the policy
 read ("provisioned only" or "provisioned and draft"), the draft ruleset
@@ -118,10 +159,10 @@ it. No second file.
    the **Readiness** strip (badge and the labelling counts, what sits
    outside every scoped fix); the **Policy** section: the policy line
    and, in the provisioned view, two tiles (exposures a provisioned deny
-   names yet reports allowed, red when above zero; pending changes not
-   read, grey), or in the draft view four tiles (drafted, navy;
-   provisioned but reported allowed, red; nothing drafted, orange;
-   pending changes, grey) and the delta table (rulesets and rules new,
+   names yet reports allowed, Risk Red when above zero; pending changes
+   not read, grey), or in the draft view four tiles (drafted, System
+   Cyan; provisioned but reported allowed, Risk Red; nothing drafted,
+   Circuit Gold; pending changes, grey) and the delta table (rulesets and rules new,
    changed, removed); four KPIs (workloads in full enforcement
    of N, unmanaged admin-port sources with the internal and public split
    only when public exist, apps reaching most of the estate of N over
@@ -161,14 +202,14 @@ it. No second file.
 ## Empty states
 
 Every tab renders with empty data: one grey sentence per section. The
-banner is green then. No tab may throw on empty arrays or a null
+banner is Safeguard Green then. No tab may throw on empty arrays or a null
 `worst`. On the Risk map: no public source means the word "public"
 appears nowhere on the tab; no drift hides the section; no crossings is
 one grey sentence; a missing summary makes the grid and the matrix say
 so; a missing lateral result shows a dash in the reach KPI; no
 `high_risk_bridge_nodes` is normal on a flat network; fewer than 12 apps
 show what exists; no identities make the accounts column zeros; no
-labels at all turn the readiness badge red and the takeaway into the
+labels at all turn the readiness badge Risk Red and the takeaway into the
 readiness sentence.
 
 ## Output
@@ -179,7 +220,7 @@ It renders directly in Claude's UI.
 
 ## Checklist
 
-- [ ] Banner colour follows the buckets (red when today is non-empty)
+- [ ] Banner colour follows the buckets (Risk Red when today is non-empty)
 - [ ] Every KPI equals the matching number in plan.md and report.md
 - [ ] Every table row is a plan line with the same score, ease and would-have-blocked
 - [ ] Ringfence rows say "selective ringfence" and their call plan carries `deny_consumer: "any"`

@@ -100,5 +100,6 @@ not assumed complete; rollback is deleting the draft.
 ## Colour
 
 Text has none. A .docx with status cells uses the dashboard mapping only
-(red = today, orange = this week, grey = watch and on demand) and every
+(Risk Red = today, Circuit Gold = this week as a fill with slate text,
+grey = watch and on demand; Illumio Orange is never a status) and every
 coloured table ends with a legend.
