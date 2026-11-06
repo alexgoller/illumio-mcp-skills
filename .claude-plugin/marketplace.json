@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "illumio",
-      "description": "Illumio PCE skills: app profile, rapid risk reduction, unknown endpoints, compliance evidence, agentic AI risk, PCE assessment, daily assessment, security dashboard. Needs the illumio-mcp MCP server.",
+      "description": "Illumio PCE skills: app profile, rapid risk reduction, unknown endpoints, compliance evidence, agentic AI risk, PCE assessment, daily assessment, security dashboard, label advisor. Needs the illumio-mcp MCP server.",
       "source": "./",
       "strict": false,
       "skills": [
@@ -17,6 +17,7 @@
         "./illumio-app-profile",
         "./illumio-compliance-evidence",
         "./illumio-daily-assessment-dashboard",
+        "./illumio-label-advisor",
         "./illumio-pce-security-assessment",
         "./illumio-rapid-risk-reduction",
         "./illumio-security-dashboard-skill",

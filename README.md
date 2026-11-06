@@ -4,7 +4,7 @@ Skills building on the Illumio MCP server for Illumio Segmentation.
 
 ## Installing the skills
 
-**Claude Code:** the repo is a plugin marketplace; one command installs all eight skills as `/illumio:<name>`:
+**Claude Code:** the repo is a plugin marketplace; one command installs all nine skills as `/illumio:<name>`:
 
 ```
 /plugin install illumio --marketplace alexgoller/illumio-mcp-skills
@@ -26,7 +26,7 @@ The Claude Code plugin (`.claude-plugin/marketplace.json`) reads the skills stra
 
 ## Conventions
 
-- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server). A skill may ship a script that merges and scores the saved tool results (app-profile, rapid-risk-reduction); such a script never talks to the PCE.
+- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server). A skill may ship a script that merges and scores the saved tool results (app-profile, rapid-risk-reduction, label-advisor); such a script never talks to the PCE. Writes to the PCE happen only where a skill says so up front (label-advisor's apply mode, labels only, after confirmation).
 - Every rendered output follows the [Illumio Field](https://claude.ai/artifact/GnMZFELJUu34V9YQWXRgYn) design system, the visual identity of the Illumio Brand Guidelines (November 2024): Zero Trust Tan and white grounds, Server Slate text, Illumio Orange as the one accent, Montserrat (FK Grotesk where installed), square corners, Server Slate table header rows. Each skill carries the same "Illumio Field" section in its design reference, so a zip stands alone.
 - Colour is used only for meaning: Risk Red critical or blocked, Safeguard Green pass or allowed, Circuit Gold warning, System Cyan info. Every dashboard, chart, document table or diagram that uses colour, bold or a tint carries a legend where the colour appears, and decorative colour is one neutral grey.
 
@@ -227,3 +227,37 @@ Turns the PCE into audit evidence for the segmentation controls a framework asks
 - `collect-compliance-evidence`: one call per framework run for all scope pairs, computing T1 to T9, T11 and T14 from active policy (inventory, enforcement, VEN health, providing rules, broad consumers, admitted services with service objects expanded, inbound and outbound boundary flows with the blocked timeline, pending draft changes, events and flows in window)
 - `find-unknown-endpoints` for unknown hosts inside scope subnets (T10)
 - `get-events kind: "policy"` for the change history with actor and resource changes (T11), `get-rulesets pversion: "active"` per pair for the isolation capability and the ruleset timestamps (T12, T13)
+
+### illumio-label-advisor
+
+**Directory:** `illumio-label-advisor/`
+
+What labels should these workloads have. Never assumes the estate is labelled: reads the label vocabulary (the four standard dimensions plus every custom dimension that has labels), the workload inventory with listening processes and ports, traffic by process and peer, and the infrastructure hubs; mines the hostname convention from the workloads that are already labelled; and proposes one value per missing dimension per workload with a confidence (high, medium, low) and the evidence sentence behind it. Fill gaps only: a label a workload carries is never suggested for or changed, and a disagreement is reported as a conflict. Output is a report that opens with the readiness verdict and a single-file React dashboard in Illumio Field (readiness, suggestions, conventions, conflicts, unresolved, apply plan). Apply mode, on request and after an explicit confirmation with the workload count, creates the missing labels with an exact-match check, assigns the merged label set per workload, verifies, and leaves a log and a rollback plan. Labels only; nothing else on the PCE is touched.
+
+**Triggers:** suggest labels, label the estate, improve labelling, what labels should these workloads have, auto-label, propose role or app or env or loc, apply suggested labels, labelling readiness.
+
+**Prerequisites:**
+- The **illumio-mcp** MCP server, **0.13.0 or later** (`group_by` on `get-traffic-flows`, label shorthand in include filters, `detail_level` on `get-workloads`)
+- Python 3 for `scripts/advise.py` (stdlib only)
+
+**Layout:**
+- `SKILL.md`: suggest and apply workflows, constraints, verification, common mistakes
+- `references/inference.md`: the signals, confidence rules, hubs, convention mining, conflicts and limits, stated once
+- `references/process-roles.md`: the listening process and port to role table the script reads at run time
+- `references/report-template.md`: report skeleton
+- `references/dashboard-spec.md`, `references/dashboard-example.jsx`: dashboard contract, Illumio Field rules and the template the script fills
+- `scripts/advise.py`: plans the batches, merges the saved results, mines conventions, scores suggestions, writes the report, the plan and the dashboard
+- `tests/`: three synthetic estates and the checks the rules are proven on (not in the zip)
+
+**Data Sources (via illumio-mcp):**
+- `get-labels usage:true` for the vocabulary and the dimensions
+- `get-workloads` compact (inventory) and full in subnet batches (listening processes and ports, OS)
+- `get-traffic-flows-summary` once, `get-traffic-flows` grouped by source, destination, port, proto and process per batch of 25 workloads as sources and as destinations
+- `identify-infrastructure-services` when app labels exist; otherwise hubs by fan-in
+- Apply mode only: `create-label`, `update-workload` (labels field)
+
+**Known gaps (server issues):** [#78](https://github.com/alexgoller/illumio-mcp-server/issues/78) label values resolved by partial match on update, [#79](https://github.com/alexgoller/illumio-mcp-server/issues/79) bulk additive label assignment, [#80](https://github.com/alexgoller/illumio-mcp-server/issues/80) label dimensions, [#81](https://github.com/alexgoller/illumio-mcp-server/issues/81) paging for full workload detail, [#82](https://github.com/alexgoller/illumio-mcp-server/issues/82) workload-level infrastructure detection.
+
+## Research
+
+Notes on ideas that are not skills yet. [research/application-detection.md](research/application-detection.md): automatic application detection by clustering workloads on traffic and process evidence; prior art, algorithms feasible in stdlib Python, hostname token mining, evaluation against already-labelled workloads, and a recommended experimental pipeline. The label advisor deliberately does not cluster; see the note for why and for what an experiment would look like.

@@ -3,3 +3,5 @@ dist/
 __pycache__/
 *.pyc
 tasks/handover/
+illumio-label-advisor/tests/out/
+illumio-label-advisor/tests/fixtures/

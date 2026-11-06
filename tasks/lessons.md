@@ -101,3 +101,15 @@
 - A shared visual rule across standalone zips: write the block once in the scratchpad, insert it
   verbatim everywhere, and diff each copy against the source at the end. Parallel agents in their
   own worktrees merged cleanly because the file sets did not overlap.
+
+## 2026-11-06 illumio-label-advisor
+- Two agents on one new skill worked without a merge because the data contract was written
+  first and both were pointed at it; the two schema gaps they reported (an untyped list, an
+  unassigned section) were the only reconciliation. Write the contract before the brief.
+- A signal family is an independent observation, not a column. The first cut let the VEN's
+  OS count as a second family, so a single listener reached "high"; ask "would this be
+  wrong for the same reason" before letting two signals agree.
+- "Fully labelled" with a sparsely used custom key never comes true; verdicts use the
+  standard dimensions, coverage tables carry the rest.
+- `cp` is aliased interactive here (already in the 2026-11-05 lesson) and it stalled a
+  background chain again; `command cp -f` in every scripted copy.

@@ -371,3 +371,126 @@ Finding: no skill followed Illumio Field. Seven rendering skills shared an older
 
 ### Review
 Four agents in four worktrees, one skill group each, merged without a conflict; the shared block and palette were written once and inserted verbatim, which is what made the seven copies identical. Judgement calls to look at: the daily health banner's middle state is Circuit Gold with slate text; the Sankey's first two series (Server Slate, System Cyan) are close in hue, named by the legend and chips; KPI numbers in rapid-risk-reduction use weight 300 like the title.
+
+## 2026-11-06 illumio-label-advisor (new skill) and application-detection research
+
+Decisions (Alex): all four standard dimensions plus the customer's custom dimensions;
+apply mode fills gaps only, never overwrites; name `illumio-label-advisor`; automatic
+application detection (clustering) is research only, not part of this skill.
+
+Server facts checked on origin/main: `get-workloads detail_level=full` carries
+`services.open_service_ports` (port, proto, process_name, user, package, win_service_name)
+and `os_id`/`os_detail`, truncated to an 800 KB response and with no offset, so full detail
+is pulled in batches by `ip_address` prefix; `get-traffic-flows` groups by process, user,
+port, source and destination (500-flow cap); `get-traffic-flows-summary` has `by_process`,
+`app_to_app`, `external_destinations`; `identify-infrastructure-services` needs labelled
+app flows (empty on an unlabelled estate); `get-labels usage:true` gives the vocabulary and
+every custom key that has at least one label; `update-workload labels` REPLACES the label
+set, resolves each value by partial match and silently creates missing labels.
+
+### Suggest mode (read-only)
+- [x] Skill skeleton: `illumio-label-advisor/SKILL.md` (frontmatter, mode question, Field
+      block verbatim from the shared source, constraints, files table, workflow, verification
+      checklist, mistakes), `references/inference.md` (signals, rules, confidence),
+      `references/process-roles.md` (listening process and port to role table, OS-aware),
+      `references/report-template.md`, `references/dashboard-spec.md`,
+      `references/dashboard-example.jsx` (template the script fills), `scripts/advise.py`
+- [x] Workflow: connection; `get-labels usage:true` (vocabulary, keys, custom dimensions);
+      `get-workloads compact` unfiltered (inventory, existing labels, os, ips, VEN); the
+      script prints the full-detail batches (`ip_address` prefix per /24, unlabelled first,
+      default cap 300 workloads, `truncated` checked per batch); `get-traffic-flows-summary`
+      unfiltered over the window (default 30 days; `by_process`, `app_to_app`,
+      `external_destinations`); per batch of up to 25 workload hrefs one
+      `get-traffic-flows` as source and one as destination grouped by source, destination,
+      port, proto, process (500 cap flagged per call); `identify-infrastructure-services`
+      when the estate has app labels, otherwise the script computes fan-in hubs itself
+- [x] `scripts/advise.py` (stdlib): merges the saved results; mines hostname conventions
+      from the labelled workloads (token position to label value with support counts, per
+      dimension, custom keys included); evidence per workload per missing dimension: role
+      (listening process and port table, OS), app (hostname token, peer tier chain of a
+      labelled app), env (hostname token, env of peers, no crossing), loc (subnet majority of
+      labelled neighbours, hostname token, VEN data centre), custom keys (mined convention
+      and subnet co-location, existing values only, never invented); confidence high (two
+      independent signals agree, or a mined convention with support >= 5 and no
+      counter-example), medium (one signal), low (model knowledge only); fill gaps only, a
+      disagreeing existing label is a report-only "conflict"; writes `advice.json`,
+      `suggestions.md`, `unresolved.md` (processes and ports not in the table, clusters
+      without a name) and the dashboard
+- [x] Model pass: the skill reads `unresolved.md`, adds suggestions it can justify from its
+      own knowledge (binary, vendor product, port) to `model-suggestions.json` with the
+      evidence sentence and confidence `low` or `medium`, and reruns the script with
+      `--model`; the script merges and marks the source
+- [x] Dashboard (Field): Readiness (coverage per dimension, VENs without process
+      visibility, unmanaged workloads), Suggestions (filter by dimension, confidence,
+      source; evidence per row), Conventions (mined patterns with support), Conflicts,
+      Unresolved, Apply plan (before and after); legend on every coloured section
+- [x] Report: readiness first, then suggestions grouped by dimension and confidence, the
+      conventions found, conflicts, unresolved, the apply plan as a table
+
+### Apply mode (writes labels, fill gaps only)
+- [x] Preferences Q&A written to `preferences.json`: dimensions to apply, minimum
+      confidence (default high), scope (all, an env, a subnet, a hostname pattern, a list),
+      dry run (default on); the script regenerates `plan.json` from advice and preferences:
+      per workload the current set, the additions, the merged set
+- [x] Apply steps: show the plan table and the exact count, require an explicit yes;
+      `get-labels` exact-value check per new value, `create-label` only for values with no
+      exact match; per workload re-read `get-workloads labels_only` by href, skip if the key
+      was filled meanwhile, `update-workload labels: <merged set>`; stop on the first error;
+      verify by re-reading every touched workload; write `apply-log.json` (before, after,
+      result) and `rollback.md` (one update-workload call per workload restoring the
+      previous set)
+- [x] Never: overwrite a label, create a label for a custom key with no existing labels,
+      touch policy, enforcement mode or any other workload field
+
+### Verification
+- [x] Fixtures: three synthetic estates (unlabelled, half labelled with a hostname
+      convention, fully labelled with custom dimension `bu`); `scripts/advise.py` runs on
+      all three; readiness and conflicts come out as expected; fill-gaps-only proven (a
+      labelled key never appears in the plan); rollback restores the fixture's before state
+- [x] Dashboard rendered with the scratchpad harness at 1280 and 400 px, 0 errors, legend
+      on every coloured section; example jsx equals a fixture run
+- [x] Description <= 1024, package.sh builds nine zips, marketplace.json lists the skill,
+      README summary and INSTALL server-version row, no em dashes
+- [x] Server issues (check for duplicates first): update-workload resolves label values by
+      partial match and silently creates labels; a bulk label-assign tool; expose label
+      dimensions (custom keys with no labels yet); offset or a `services` detail level for
+      `get-workloads` (full is capped by bytes, no paging)
+- [x] Branch `skills/label-advisor`, PR, memory, lessons
+
+### Research (separate, not in the skill)
+- [x] `research/application-detection.md`: prior art (Secure Workload ADM, Guardicore,
+      ServiceNow, Dynatrace, Illumio app groups), algorithms feasible in stdlib
+      (label propagation, components after hub removal, feature similarity), hostname
+      token mining, evaluation against already-labelled workloads, a recommended
+      experimental pipeline and where it should live; reviewed and linked from the README
+      as research, not a skill
+
+### Review
+Built by two agents in one checkout (disjoint file sets, no git from either) against a
+schema written first (`scratchpad/la/schema.md`), which is why the script's advice.json and
+the dashboard's DATA met without a merge. Fixtures: unlabelled 60 workloads, 51 role
+suggestions (5 high, 46 medium), 5 hubs by fan-in, 0 conflicts; half 120 workloads, 60
+fully, 20 partly, 40 unlabelled, 250 suggestions with the model pass (237 high), 2 planted
+conflicts found with the right evidence, 30 conventions, one truncated input reported,
+plan 58 workloads and 237 labels with 0 to create; full 80 workloads, 0 suggestions, 0
+conflicts. check.py proves fill-gaps-only (no plan entry adds a key the workload has),
+custom values only, no model entry above medium, rollback equals the before set. Two
+judgement calls changed after the agent's report: `ven_os` is part of the listener family
+(the OS makes a listener match more specific, it is not a second observation), so a
+listener alone is medium until traffic, a convention or a subnet rule agrees; and "fully
+labelled" counts the four standard dimensions only, custom keys stay in the coverage
+table. The example dashboard is byte-equal to the half-model fixture run (`--date` fixes
+the stamp). Rendered: six tabs, zero console errors at 1280 and 400 px, legend on every
+coloured section, 400 px without page scroll; screenshots inspected (stale "every
+dimension" note and a "/" hub port fixed from them). package.sh builds nine zips, tests
+pruned from the zip, description 991 chars. Server issues #78 to #82 filed. Not run
+against a live PCE; the `ip_address` prefix match for batching is the server's documented
+partial match, not verified live.
+
+## Backlog (2026-11-06)
+- Mythos readiness dashboard and report (Alex): a risk-reduction view of the estate against
+  AI-driven attackers (Mythos-class models that find, exploit and move laterally on their
+  own); adapt rapid-risk-reduction's triage and risk map rather than start over. Alex's
+  own term (no Illumio definition to follow); audience is the CISO: a readiness grade per
+  app or environment with what moves it up a level, risk map as the evidence appendix,
+  engineer-level call plans out of the main body. Plan after the label advisor ships.
