@@ -107,7 +107,8 @@ show their traffic as `blocked`."
 ## Colour
 
 The plan is text. If it is rendered as a document with status colours
-(a .docx through the docx skill), the only mapping is: red = Block today,
-amber = This week, grey = Watch and Isolate on demand; nothing else is
-coloured. Every table that uses colour ends with a legend naming each
+(a .docx through the docx skill), the only mapping is the dashboard's
+Illumio Field one: Risk Red = Block today, Circuit Gold = This week (a
+fill with slate text), grey = Watch and Isolate on demand; nothing else
+is coloured. Every table that uses colour ends with a legend naming each
 colour where it is used, and decorative colour is one neutral grey.
