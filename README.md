@@ -27,7 +27,8 @@ The Claude Code plugin (`.claude-plugin/marketplace.json`) reads the skills stra
 ## Conventions
 
 - Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server). A skill may ship a script that merges and scores the saved tool results (app-profile, rapid-risk-reduction); such a script never talks to the PCE.
-- Colour is used only for meaning. Every dashboard, chart, document table or diagram that uses colour, bold or a tint carries a legend where the colour appears, and decorative colour is one neutral grey.
+- Every rendered output follows the [Illumio Field](https://claude.ai/artifact/GnMZFELJUu34V9YQWXRgYn) design system, the visual identity of the Illumio Brand Guidelines (November 2024): Zero Trust Tan and white grounds, Server Slate text, Illumio Orange as the one accent, Montserrat (FK Grotesk where installed), square corners, Server Slate table header rows. Each skill carries the same "Illumio Field" section in its design reference, so a zip stands alone.
+- Colour is used only for meaning: Risk Red critical or blocked, Safeguard Green pass or allowed, Circuit Gold warning, System Cyan info. Every dashboard, chart, document table or diagram that uses colour, bold or a tint carries a legend where the colour appears, and decorative colour is one neutral grey.
 
 ## Skills
 
@@ -66,7 +67,7 @@ Generates a comprehensive Illumio PCE security assessment report as a branded `.
 - Draft vs active policy comparison
 - Traffic flow analysis
 
-The report is styled with Illumio brand colors and saved as a `.docx` file.
+The report follows Illumio Field (Montserrat with Arial fallback, Server Slate headings, status cells with a legend row) and is saved as a `.docx` file.
 
 ### illumio-app-profile
 
@@ -86,7 +87,7 @@ Everything about one application, identified by labels (`app=shop, env=prod`): i
 
 **Directory:** `illumio-rapid-risk-reduction/`
 
-What can we block or fence **now** with the least chance of breaking something, and where does the risk sit. Checks labelling readiness first (labels are never assumed complete), triages the estate (unknown sources on admin ports, admin ports crossing environments, internet-exposed listeners, lateral-movement bridge apps, visibility-mode apps that policy already wants to block, identities with wide reach), scores each exposure by blast radius x ease, and produces three views of one result, each opening with a risk map (apps ranked on unmanaged inbound traffic, unmanaged admin-port sources, environment crossings, wide-reach accounts and workloads not enforcing; traffic between environments; override denies not showing in traffic; a generated fix-first list): a one-page plan (block today, fence this week, isolate on demand, watch), a risk report (risk, what was seen, evidence and recommended action per exposure) and a single-file React dashboard in the Illumio style. Every fix is a draft call plan marked `DO_NOT_CALL`: override deny rules for unknown admin-port sources, plain denies for environment crossings, selective ringfences with `deny_consumer: any`, and an isolation runbook per crown-jewel app spelled out as tool calls. Nothing is created or provisioned.
+What can we block or fence **now** with the least chance of breaking something, and where does the risk sit. Checks labelling readiness first (labels are never assumed complete), triages the estate (unknown sources on admin ports, admin ports crossing environments, internet-exposed listeners, lateral-movement bridge apps, visibility-mode apps that policy already wants to block, identities with wide reach), scores each exposure by blast radius x ease, and produces three views of one result, each opening with a risk map (apps ranked on unmanaged inbound traffic, unmanaged admin-port sources, environment crossings, wide-reach accounts and workloads not enforcing; traffic between environments; override denies not showing in traffic; a generated fix-first list): a one-page plan (block today, fence this week, isolate on demand, watch), a risk report (risk, what was seen, evidence and recommended action per exposure) and a single-file React dashboard in Illumio Field. Every fix is a draft call plan marked `DO_NOT_CALL`: override deny rules for unknown admin-port sources, plain denies for environment crossings, selective ringfences with `deny_consumer: any`, and an isolation runbook per crown-jewel app spelled out as tool calls. Nothing is created or provisioned.
 
 **Triggers:** rapid risk reduction, quick wins, what can we block today, reduce blast radius fast, emergency hardening, incident hardening, ransomware quick wins, what to fence first, 24-hour or 7-day plan, where does the risk sit, risk map.
 
@@ -135,7 +136,7 @@ Generates an interactive single-file React (.jsx) security assessment dashboard 
 - Compliance checks
 - Traffic flow analysis
 
-The dashboard uses Illumio brand colors, DM Sans font, and renders as a Claude artifact with D3 network graph visualization.
+The dashboard follows Illumio Field and renders as a Claude artifact with D3 network graph visualization.
 
 ### illumio-agentic-ai-risk-assessment
 
@@ -159,8 +160,6 @@ Runs an end-to-end agentic AI security and risk assessment against an Illumio PC
 - `references/agent-catalog.md` — process names, matching rules, vendor egress hints
 - `references/risk-rubric.md` — scoring and regulatory mapping
 - `references/report-template.md` — report skeleton
-- `references/dashboard-spec.md` — React dashboard: palette, data constants, tabs, components, checklist
-- `references/dashboard-example.jsx` — working example of the dashboard with synthetic data
 - `references/sankey-template.html` — the reach diagram (d3 + d3-sankey)
 - `scripts/aggregate_flows.py` — merges sliced `get-traffic-flows` results into one flow table and emits the Sankey data
 
@@ -183,7 +182,7 @@ Finds the addresses in PCE traffic that the PCE does not know at all, neither as
 - The **illumio-mcp** MCP server must be connected with a healthy PCE connection
 
 **Outputs:**
-- A single-file React dashboard in the same Illumio style as the other dashboard skills: health banner, KPI cards, findings, unknown sources and destinations tables with policy bars, a subnets view of inventory gaps, suggestions, and a deep-dive timeline when run
+- A single-file React dashboard in Illumio Field like the other dashboard skills: health banner, KPI cards, findings, unknown sources and destinations tables with policy bars, a subnets view of inventory gaps, suggestions, and a deep-dive timeline when run
 - A report: scope line with the query count and truncation, summary counts, findings U1 to U10 (host inside a managed subnet, scanner, admin-port reach, allowed into enforced workloads, uninventoried infrastructure, public source, notable public destination, no IP-list object, volume outlier, unverified counts), unknown sources and destinations tables with address class, IP-list coverage, subnet neighbourhood, peers, ports, policy mix and profile shape, and suggested `create-workload` / `create-iplist` / `create-deny-rule` objects that are never executed
 - An opt-in deep dive per endpoint: peer x port x policy table and a spike-marked timeline
 
@@ -213,7 +212,7 @@ Turns the PCE into audit evidence for the segmentation controls a framework asks
 - A Word evidence pack: scope declaration with label hrefs, method, control summary per requirement (PASS, FAIL, EXCEPTION, ATTESTED, NOT TESTED with a legend row), one section per requirement with the evidence tables and the query that produced them, the full test table, attestations, drift since the previous pack, the out-of-scope list, and an evidence index with SHA-256 hashes
 - A Markdown twin for diffing between runs, and a zip of the raw tool results
 - A PowerPoint deck: title with overall status, scope and method, control summary, one slide per failing or excepted requirement, attestations, drift, out of scope, evidence index, with a legend strip on every status slide
-- A React dashboard in the shared Illumio style: overview, requirements with expandable tests and evidence, tests per pair, boundary traffic with policy bars and the blocked-per-day timeline, attestations, drift, evidence index, with a colour key and a legend in every section
+- A React dashboard in Illumio Field: overview, requirements with expandable tests and evidence, tests per pair, boundary traffic with policy bars and the blocked-per-day timeline, attestations, drift, evidence index, with a colour key and a legend in every section
 
 **Layout:**
 - `SKILL.md` — inputs, scope confirmation, Steps 0 to 6, verification, server gaps, common mistakes
