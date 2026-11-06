@@ -246,7 +246,8 @@ Compute from `merged/flows.csv` and `summary.json`:
 Fill the risk register and regulatory table from `references/risk-rubric.md`
 and write the report along `references/report-template.md`. Publish
 `merged/sankey.html` as the Sankey artifact (favicon, title "Agentic AI
-Reach"). Then run the verification task below before publishing anything.
+Reach"), styled as the Outputs section below describes. Then run the
+verification task below before publishing anything.
 
 ## Label handling
 
@@ -276,6 +277,39 @@ finding, not decoration.
 
 ## Outputs
 
+### Illumio Field
+
+Every rendered output of every skill in this repo follows the Illumio Field
+design system, which implements the visual identity of the Illumio Brand
+Guidelines (November 2024). Visual identity only; no brand messaging.
+
+- **Grounds.** Page on Zero Trust Tan `#F7F4EE`; cards, panels and tables
+  white; square corners (0, at most 2px on small tags); 1px borders
+  `#D6D7D7`; table banding `#EAEBEB`.
+- **Text.** Server Slate `#313638` for headings and primary text, `#464A4C`
+  for body, `#64686A` for captions and labels, `#6F7274` the lightest
+  colour for small text on white. Page title in weight 300 (Light);
+  eyebrows and section labels in Server Slate SemiBold caps; emphasis
+  SemiBold.
+- **Font.** `"FK Grotesk", Montserrat, Arial, sans-serif`; load Montserrat
+  300, 400, 500 and 600 from Google Fonts.
+- **Accent.** Illumio Orange `#FF5500` is the one brand accent: the active
+  tab underline, the rule under the page title, a "today" or "new" marker.
+  As text only at 24px and up or bold on white; never on tan (contrast
+  1.1); never as a status colour.
+- **Status colours**, for meaning only, each with a legend where it
+  appears: Risk Red `#BE122F` critical, failed, blocked; Safeguard Green
+  `#166644` pass, allowed, enforced, healthy; Circuit Gold `#F97607`
+  warning, high; Gold `#FFA22F` medium; System Cyan `#2D454C` info,
+  selective, in progress. Red, green and cyan may be text on white; gold
+  is a fill, swatch, border or bar with slate text, never small text.
+  Row and badge tints are the status colour at 10% over white
+  (`rgba(190,18,47,0.10)` and so on), never a separate hue.
+- **Tables.** Server Slate header row with white text, light banding,
+  hairline borders.
+- **Decoration.** None in colour: section strips, dividers and inactive
+  elements are slate greys.
+
 **Report**: the ten sections of `references/report-template.md`, in order,
 each opening with its point. Format follows the up-front answer: Claude Doc
 by default in Cowork, a markdown file in Claude Code, `.docx` on request via
@@ -283,11 +317,19 @@ the docx skill.
 
 **Sankey**: three columns (endpoint grouped VDI then laptop, agent process,
 internal application), link width is connections, colour by agent in the
-fixed order Cursor, ChatGPT, Claude, then others. Filters for agent, source
-kind and regulated only. Tooltip lists the hosts and ports behind a ribbon.
-Sortable flow table below. Light and dark theme. d3 7.9.0 and d3-sankey
-0.12.3 from cdnjs. The script fills `RAW`, `HOSTS` and `APPS`; leave the
-rest of the template alone.
+fixed order Cursor, ChatGPT, Claude, then others. Ribbons and agent nodes
+take the brand chart series in this order: Server Slate `#313638`, System
+Cyan `#2D454C`, Illumio Orange `#FF5500`, Cloud Cerulean `#94CEE5`, Circuit
+Gold `#FFA22F`, Protocol Purple `#8B407A`; a seventh agent and beyond share
+one neutral grey and are named together. Safeguard Green `#166644` means
+allowed and Risk Red `#BE122F` means blocked or regulated reach; nothing
+else uses those two. Every coloured element (agent, node, regulated marker,
+policy dot) is named in a legend on the page. Page on Zero Trust Tan with
+white panels, square corners, Montserrat 300 to 600 from Google Fonts,
+light theme only. Filters for agent, source kind and regulated only.
+Tooltip lists the hosts and ports behind a ribbon. Sortable flow table
+below. d3 7.9.0 and d3-sankey 0.12.3 from cdnjs. The script fills `RAW`,
+`HOSTS` and `APPS`; leave the rest of the template alone.
 
 **Draft rulesets** (only when the user asks "write the rules"): emit ruleset
 drafts as JSON or as `create-ruleset` / `create-deny-rule` call plans. Never

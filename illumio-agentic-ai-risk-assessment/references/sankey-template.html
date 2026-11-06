@@ -1,95 +1,46 @@
 <title>Agentic AI Reach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* Illumio Field palette. Light theme only: Zero Trust Tan ground, white panels. */
   :root {
     color-scheme: light;
-    --page: #f9f9f7;
-    --surface: #fcfcfb;
-    --surface-2: #f3f2ee;
-    --ink: #0b0b0b;
-    --ink-2: #52514e;
-    --muted: #898781;
-    --grid: #e1e0d9;
-    --axis: #c3c2b7;
-    --ring: rgba(11, 11, 11, 0.10);
-    --node: #b1afa7;
-    --focus: #2a78d6;
-    --s1: #2a78d6;
-    --s2: #eb6834;
-    --s3: #1baf7a;
-    --s4: #eda100;
-    --s5: #e87ba4;
-    --s6: #008300;
-    --s7: #4a3aa7;
-    --s8: #e34948;
-    --other: #9a9891;
-    --good: #0ca30c;
-    --warn: #fab219;
-    --serious: #ec835a;
-    --crit: #d03b3b;
-    --crit-wash: rgba(208, 59, 59, 0.07);
-    --link-opacity: 0.42;
-    --link-opacity-hi: 0.78;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --page: #0d0d0d;
-      --surface: #1a1a19;
-      --surface-2: #232322;
-      --ink: #ffffff;
-      --ink-2: #c3c2b7;
-      --muted: #898781;
-      --grid: #2c2c2a;
-      --axis: #383835;
-      --ring: rgba(255, 255, 255, 0.10);
-      --node: #55544f;
-      --focus: #3987e5;
-      --s1: #3987e5;
-      --s2: #d95926;
-      --s3: #199e70;
-      --s4: #c98500;
-      --s5: #d55181;
-      --s6: #008300;
-      --s7: #9085e9;
-      --s8: #e66767;
-      --other: #6f6e68;
-      --crit-wash: rgba(208, 59, 59, 0.14);
-      --link-opacity: 0.5;
-      --link-opacity-hi: 0.85;
-    }
-  }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --surface-2: #232322;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --ring: rgba(255, 255, 255, 0.10);
-    --node: #55544f;
-    --focus: #3987e5;
-    --s1: #3987e5;
-    --s2: #d95926;
-    --s3: #199e70;
-    --s4: #c98500;
-    --s5: #d55181;
-    --s6: #008300;
-    --s7: #9085e9;
-    --s8: #e66767;
-    --other: #6f6e68;
-    --crit-wash: rgba(208, 59, 59, 0.14);
-    --link-opacity: 0.5;
-    --link-opacity-hi: 0.85;
+    --page: #F7F4EE;          /* Zero Trust Tan */
+    --surface: #FFFFFF;       /* panels, cards, table */
+    --surface-2: #F5F5F5;     /* subtle hover fill */
+    --ink: #313638;           /* Server Slate: headings, primary text */
+    --ink-2: #464A4C;         /* body text */
+    --muted: #64686A;         /* captions, labels */
+    --grid: #D6D7D7;          /* hairline borders */
+    --axis: #D6D7D7;
+    --ring: #D6D7D7;
+    --band: #EAEBEB;          /* table banding */
+    --node: #C1C3C3;          /* endpoint and application nodes */
+    --accent: #FF5500;        /* Illumio Orange: title rule only, never a status */
+    --focus: #313638;
+    /* brand chart series, assigned to agents in fixed order */
+    --s1: #313638;            /* Server Slate */
+    --s2: #2D454C;            /* System Cyan */
+    --s3: #FF5500;            /* Illumio Orange */
+    --s4: #94CEE5;            /* Cloud Cerulean */
+    --s5: #FFA22F;            /* Circuit Gold */
+    --s6: #8B407A;            /* Protocol Purple */
+    --other: #6F7274;         /* seventh agent and beyond */
+    /* status: meaning only, each named in a legend */
+    --good: #166644;          /* Safeguard Green: allowed */
+    --warn: #F97607;          /* Circuit Gold 110: potentially blocked */
+    --crit: #BE122F;          /* Risk Red: blocked, regulated reach */
+    --crit-wash: rgba(190, 18, 47, 0.10);
+    --link-opacity: 0.45;
+    --link-opacity-hi: 0.8;
   }
 
   * { box-sizing: border-box; }
   body {
     background: var(--page);
     color: var(--ink);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: "FK Grotesk", Montserrat, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.45;
     padding-inline: 20px;
@@ -98,12 +49,13 @@
   }
   .wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 
-  header h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 4px; text-wrap: balance; }
+  header { padding-bottom: 12px; border-bottom: 2px solid var(--accent); }
+  header h1 { font-size: 26px; font-weight: 300; letter-spacing: 0; margin: 0 0 4px; text-wrap: balance; color: var(--ink); }
   header p { margin: 0; color: var(--ink-2); font-size: 14px; }
-  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); margin: 0 0 6px; }
 
   .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-  .kpi { background: var(--surface); border: 1px solid var(--ring); border-radius: 6px; padding: 12px 14px 10px; min-width: 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--ring); border-radius: 0; padding: 12px 14px 10px; min-width: 0; }
   .kpi .l { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .kpi .v { font-size: 26px; font-weight: 600; line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .kpi.crit .v { color: var(--crit); }
@@ -118,39 +70,39 @@
   .chip {
     display: inline-flex; align-items: center; gap: 7px;
     border: 1px solid var(--axis); background: var(--surface); color: var(--ink);
-    border-radius: 999px; padding: 4px 11px 4px 8px; font: inherit; font-size: 13px; cursor: pointer;
+    border-radius: 0; padding: 4px 11px 4px 8px; font: inherit; font-size: 13px; cursor: pointer;
     transition: background 120ms, border-color 120ms, opacity 120ms;
   }
-  .chip .sw { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+  .chip .sw { width: 10px; height: 10px; border-radius: 0; background: var(--c); flex: none; }
   .chip[aria-pressed="false"] { opacity: 0.5; }
   .chip[aria-pressed="false"] .sw { background: transparent; box-shadow: inset 0 0 0 2px var(--c); }
   .chip:hover { background: var(--surface-2); }
   .chip:focus-visible, .seg label:focus-within, .check:focus-within, .linkbtn:focus-visible, th button:focus-visible, .node:focus-visible rect { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-  .seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 6px; overflow: hidden; background: var(--surface); }
+  .seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 0; overflow: hidden; background: var(--surface); }
   .seg label { position: relative; padding: 5px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2); border-right: 1px solid var(--axis); user-select: none; }
   .seg label:last-child { border-right: 0; }
   .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
   .seg label:has(input:checked) { background: var(--ink); color: var(--surface); }
 
   .check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 0; cursor: pointer; }
-  .check input { width: 15px; height: 15px; margin: 0; accent-color: var(--crit); }
+  .check input { width: 15px; height: 15px; margin: 0; accent-color: var(--ink); }
   .linkbtn { background: none; border: 0; color: var(--ink-2); font: inherit; font-size: 13px; padding: 5px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .linkbtn:hover { color: var(--ink); }
   .group.tail { margin-left: auto; align-self: flex-end; }
 
-  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; }
+  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 0; }
   .card.viz { position: relative; padding: 14px 8px 8px; }
   .scroll { overflow-x: auto; overflow-y: hidden; }
   svg { display: block; }
   .node rect { cursor: pointer; }
   .node rect.reg { stroke: var(--crit); stroke-width: 2px; }
   .node:focus { outline: none; }
-  .lbl { font-size: 12.5px; font-weight: 600; fill: var(--ink); pointer-events: none; }
+  .lbl { font-size: 12.5px; font-weight: 500; fill: var(--ink); pointer-events: none; }
   .lbl.mid { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
   .sub { font-size: 11px; fill: var(--muted); pointer-events: none; }
   .sub.mid { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; font-variant-numeric: tabular-nums; }
-  .colhead { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--muted); }
+  .colhead { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--ink); }
   .flag { fill: var(--crit); }
   .link { fill: none; stroke-opacity: var(--link-opacity); transition: stroke-opacity 140ms, opacity 140ms; }
   .link.hi { stroke-opacity: var(--link-opacity-hi); }
@@ -161,8 +113,8 @@
 
   .tip {
     position: absolute; z-index: 5; pointer-events: none; max-width: 320px;
-    background: var(--ink); color: var(--surface); border-radius: 6px; padding: 9px 11px; font-size: 12px; line-height: 1.4;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    background: var(--ink); color: var(--surface); border-radius: 0; padding: 9px 11px; font-size: 12px; line-height: 1.4;
+    box-shadow: none;
   }
   .tip .t { font-weight: 600; font-size: 12.5px; }
   .tip .big { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0 4px; }
@@ -175,20 +127,25 @@
   .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 8px 8px 2px; font-size: 12px; color: var(--ink-2); align-items: center; }
   .legend .k { display: inline-flex; align-items: center; gap: 6px; }
   .legend .flag-glyph { color: var(--crit); font-size: 11px; }
-  .legend .nd { width: 12px; height: 12px; border-radius: 2px; background: var(--node); }
+  .legend .nd { width: 12px; height: 12px; border-radius: 0; background: var(--node); flex: none; }
+  .legend .nd.good { background: var(--good); }
+  .legend .nd.warn { background: var(--warn); }
+  .legend .nd.crit { background: var(--crit); }
+  .legend .nd.unknown { background: var(--muted); }
+  .legend .nd.other { background: var(--other); }
   .legend .nd.reg { box-shadow: inset 0 0 0 2px var(--crit); }
 
   .empty { padding: 40px 16px; text-align: center; color: var(--ink-2); }
 
   .tablehead { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; padding: 14px 16px 8px; }
-  .tablehead h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .tablehead h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
   .tablehead .n { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 900px; }
   th, td { text-align: left; padding: 7px 10px; border-top: 1px solid var(--grid); white-space: nowrap; }
-  th { border-top: 0; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--surface); position: sticky; top: 0; }
+  th { border-top: 0; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #FFFFFF; font-weight: 600; background: var(--ink); position: sticky; top: 0; }
   th button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
-  th button:hover { color: var(--ink); }
-  th.sorted button { color: var(--ink); }
+  th button:hover { color: var(--surface-2); }
+  th.sorted button { color: #FFFFFF; text-decoration: underline; text-underline-offset: 3px; }
   th .arr { font-size: 10px; opacity: 0; width: 8px; display: inline-block; }
   th.sorted .arr { opacity: 1; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -196,13 +153,14 @@
   td.dim { color: var(--ink-2); }
   tr.reg td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
   tr.reg td.app .g { color: var(--crit); font-size: 11px; margin-right: 5px; }
+  tbody tr:nth-child(even) td { background: var(--band); }
   tbody tr:hover td { background: var(--surface-2); }
   .pol { display: inline-flex; align-items: center; gap: 6px; }
-  .pol i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pol i { width: 8px; height: 8px; border-radius: 0; background: var(--muted); flex: none; }
   .pol.allowed i { background: var(--good); }
   .pol.blocked i { background: var(--crit); }
   .pol.potentially_blocked i { background: var(--warn); }
-  .comp { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--crit); color: var(--crit); }
+  .comp { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 2px; border: 1px solid var(--crit); color: var(--crit); background: var(--crit-wash); }
 </style>
 
 <div class="wrap">
@@ -245,9 +203,9 @@
     <div class="empty" id="empty" hidden>No flows match the current filters.</div>
     <div class="tip" id="tip" hidden></div>
     <div class="legend" id="legend">
-      <span class="k"><span class="nd"></span>Endpoint or application</span>
-      <span class="k"><span class="nd reg"></span><span class="flag-glyph">◆</span>Regulated application</span>
-      <span class="k">Ribbon and middle-column node colour = agent:</span>
+      <span class="k"><span class="nd"></span>Endpoint or application (grey)</span>
+      <span class="k"><span class="nd reg"></span><span class="flag-glyph">◆</span>Regulated application: red outline, red diamond, red row marker and red KPI</span>
+      <span class="k">Ribbon and agent node colour = agent:</span>
       <span id="legendAgents" style="display:contents"></span>
       <span class="k">Ribbon width = connections</span>
       <span class="k" id="legendNote">Hover a ribbon for the hosts and ports behind it. Click a node to pin its paths.</span>
@@ -258,6 +216,14 @@
     <div class="tablehead">
       <h2>Flows</h2>
       <span class="n" id="tableCount"></span>
+    </div>
+    <div class="legend" aria-label="Policy colour legend">
+      <span class="k">Policy today:</span>
+      <span class="k"><span class="nd good"></span>Green = allowed</span>
+      <span class="k"><span class="nd crit"></span>Red = blocked</span>
+      <span class="k"><span class="nd warn"></span>Gold = potentially blocked</span>
+      <span class="k"><span class="nd unknown"></span>Grey = unknown</span>
+      <span class="k"><span class="nd crit" style="background: var(--crit-wash); box-shadow: inset 3px 0 0 var(--crit)"></span>Red edge = regulated application</span>
     </div>
     <div class="scroll">
       <table id="flows">
@@ -351,14 +317,17 @@ function rowKind(r) { return r.kind || hostMeta(r.src).kind || "unknown"; }
 function rowUser(r) { return r.user || hostMeta(r.src).user || ""; }
 
 // Colour follows the agent, assigned once from the full dataset in fixed order,
-// so filtering never repaints survivors. Slots 9+ fold into the neutral "other" tone.
+// so filtering never repaints survivors. The six brand chart series are used in
+// order (Server Slate, System Cyan, Illumio Orange, Cloud Cerulean, Circuit Gold,
+// Protocol Purple); slots 7+ fold into the neutral "other" tone.
+const SERIES = 6;
 const agentsAll = [...new Set(RAW.map(r => r.agent))].sort(agentCmp);
-const agentSlot = new Map(agentsAll.map((a, i) => [a, i < 8 ? `--s${i + 1}` : "--other"]));
+const agentSlot = new Map(agentsAll.map((a, i) => [a, i < SERIES ? `--s${i + 1}` : "--other"]));
 const agentColor = (a) => `var(${agentSlot.get(a) || "--other"})`;
 const kindsAll = [...new Set(RAW.map(rowKind))].sort(kindCmp);
 
 // Legend: one swatch per agent in the colour the ribbons use, so a reader
-// never has to infer an agent from a hue. Agents beyond the eighth share the
+// never has to infer an agent from a hue. Agents beyond the sixth share the
 // neutral "other" tone and are named together.
 function buildLegend() {
   const host = document.getElementById("legendAgents");
@@ -373,8 +342,8 @@ function buildLegend() {
   });
   if (other.length) {
     const k = document.createElement("span"); k.className = "k";
-    const sw = document.createElement("span"); sw.className = "nd"; sw.style.background = "var(--other)";
-    k.append(sw, document.createTextNode("other: " + other.join(", ")));
+    const sw = document.createElement("span"); sw.className = "nd other";
+    k.append(sw, document.createTextNode("other (grey): " + other.join(", ")));
     host.appendChild(k);
   }
 }
@@ -534,7 +503,6 @@ function renderSankey(rows) {
     .attr("class", d => d.reg ? "reg" : null)
     .attr("x", d => d.x0).attr("y", d => d.y0)
     .attr("width", d => d.x1 - d.x0).attr("height", d => Math.max(2, d.y1 - d.y0))
-    .attr("rx", 2)
     .style("fill", d => d.col === 1 ? agentColor(d.name) : "var(--node)");
 
   // labels
@@ -728,7 +696,7 @@ function renderTable(rows) {
         const i = document.createElement("i"); s.append(i, document.createTextNode(c.get(r))); td.appendChild(s);
       } else if (c.key === "agent") {
         const s = document.createElement("span"); s.className = "pol";
-        const i = document.createElement("i"); i.style.background = agentColor(r.agent); i.style.borderRadius = "2px";
+        const i = document.createElement("i"); i.style.background = agentColor(r.agent);
         s.append(i, document.createTextNode(r.agent)); td.appendChild(s);
       } else if (c.key === "connections") {
         td.textContent = num(c.get(r));

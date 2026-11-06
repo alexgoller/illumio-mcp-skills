@@ -200,51 +200,98 @@ The report should contain these sections. Adapt based on available data — skip
 
 ## Branding & Styling
 
-Use Illumio brand colors throughout:
+### Illumio Field
 
-| Purpose | Color | Hex |
-|---------|-------|-----|
-| Primary brand green | Illumio Green | `00C48C` |
-| Dark text / headers | Illumio Dark Navy | `1A1F36` |
-| Teal accent | Illumio Teal | `00B4D8` |
-| Warning | Illumio Orange | `FF6B35` |
-| Critical / alert | Illumio Red | `E63946` |
-| Light background | Light Green BG | `F0F7F4` |
-| Body text gray | Gray | `6B7280` |
+Every rendered output of every skill in this repo follows the Illumio Field
+design system, which implements the visual identity of the Illumio Brand
+Guidelines (November 2024). Visual identity only; no brand messaging.
+
+- **Grounds.** Page on Zero Trust Tan `#F7F4EE`; cards, panels and tables
+  white; square corners (0, at most 2px on small tags); 1px borders
+  `#D6D7D7`; table banding `#EAEBEB`.
+- **Text.** Server Slate `#313638` for headings and primary text, `#464A4C`
+  for body, `#64686A` for captions and labels, `#6F7274` the lightest
+  colour for small text on white. Page title in weight 300 (Light);
+  eyebrows and section labels in Server Slate SemiBold caps; emphasis
+  SemiBold.
+- **Font.** `"FK Grotesk", Montserrat, Arial, sans-serif`; load Montserrat
+  300, 400, 500 and 600 from Google Fonts.
+- **Accent.** Illumio Orange `#FF5500` is the one brand accent: the active
+  tab underline, the rule under the page title, a "today" or "new" marker.
+  As text only at 24px and up or bold on white; never on tan (contrast
+  1.1); never as a status colour.
+- **Status colours**, for meaning only, each with a legend where it
+  appears: Risk Red `#BE122F` critical, failed, blocked; Safeguard Green
+  `#166644` pass, allowed, enforced, healthy; Circuit Gold `#F97607`
+  warning, high; Gold `#FFA22F` medium; System Cyan `#2D454C` info,
+  selective, in progress. Red, green and cyan may be text on white; gold
+  is a fill, swatch, border or bar with slate text, never small text.
+  Row and badge tints are the status colour at 10% over white
+  (`rgba(190,18,47,0.10)` and so on), never a separate hue.
+- **Tables.** Server Slate header row with white text, light banding,
+  hairline borders.
+- **Decoration.** None in colour: section strips, dividers and inactive
+  elements are slate greys.
+
+### Word document rules
+
+The report is built with the docx skill. Map the Field system onto it with
+these colours (hex without `#`, as the `docx` package expects):
+
+| Purpose | Colour | Hex |
+|---------|--------|-----|
+| Headings, header bars, table header rows | Server Slate | `313638` |
+| Body text | Body grey | `464A4C` |
+| Captions, labels, header and footer text | Muted grey | `64686A` |
+| Table borders | Hairline grey | `D6D7D7` |
+| Table banding (alternate body rows) | Band grey | `EAEBEB` |
+| Accent rule under the title only | Illumio Orange | `FF5500` |
+| Critical / fail / high risk | Risk Red | `BE122F` |
+| Warning / medium risk | Circuit Gold | `F97607` |
+| Pass / enforced / low risk | Safeguard Green | `166644` |
+| Info / in progress | System Cyan | `2D454C` |
+
+Illumio Orange `FF5500` appears only as a thin accent rule under the title
+(a paragraph bottom border) or as text at 24pt and larger. It is never a
+status colour, never a fill behind text, and never used for emphasis in body
+copy.
 
 ### Status Cells
-Use colored cells for status indicators:
-- **CRITICAL / FAIL / High Risk**: Red background (`E63946`), white text
-- **WARNING / Medium Risk**: Orange background (`FF6B35`), white text
-- **PASS / OK / Enforced / Low Risk**: Green background (`00C48C`), white text
-- **INFO / In Progress**: Teal background (`00B4D8`), white text
+Use coloured cells for status indicators:
+- **CRITICAL / FAIL / High Risk**: Risk Red background (`BE122F`), white text
+- **WARNING / Medium Risk**: Circuit Gold background (`F97607`), Server Slate text (`313638`)
+- **PASS / OK / Enforced / Low Risk**: Safeguard Green background (`166644`), white text
+- **INFO / In Progress**: System Cyan background (`2D454C`), white text
 
 ### Colour legend (required)
 Colour is used only for meaning, and the reader is never left to guess it:
-- Directly under the first table that uses status cells, and at the start of every later section that uses them, add a one-row legend table: four cells in the four status colours, each reading "Red: critical / fail / high risk", "Orange: warning / medium risk", "Green: pass / enforced / low risk", "Teal: info / in progress".
-- The KPI dashboard tiles are coloured by what they report, not by position: red for a count that needs action, orange for one to watch, green for a healthy one, teal for a plain count. Add a caption line under the tiles stating that rule.
+- Directly under the first table that uses status cells, and at the start of every later section that uses them, add a one-row legend table: four cells in the four status colours, each reading "Red: critical / fail / high risk", "Gold: warning / medium risk", "Green: pass / enforced / low risk", "Cyan: info / in progress".
+- The KPI dashboard tiles are coloured by what they report, not by position: red for a count that needs action, gold for one to watch, green for a healthy one, cyan for a plain count. Add a caption line under the tiles stating that rule.
 - Brand-only colour (headings, header bars, borders) carries no meaning; do not put it in a legend, and do not use a status colour for decoration.
 
 ### Typography
-- Font: Arial throughout
-- Headings: Bold, Illumio Dark Navy, H1 at 32pt, H2 at 26pt
-- Body: 20pt (10pt), Illumio Dark Navy
-- Table headers: White text on Illumio Dark Navy background
-- Page header: Green bottom border, italic gray text with "Confidential" in red
-- Page footer: Gray top border with page numbers
+- Font: Montserrat, with Arial as the fallback. Check whether Montserrat is installed (`fc-list | grep -i montserrat`); if it is not, set Arial for every run so the document renders the same for author and reader. Word substitutes a missing font, so the point sizes below hold either way.
+- Title: Montserrat Light (font name `Montserrat Light`, or Arial), Server Slate `313638`, with a thin Illumio Orange `FF5500` bottom border on the title paragraph
+- Headings: Montserrat SemiBold (font name `Montserrat SemiBold`, or Arial bold), Server Slate `313638`, H1 at 32pt, H2 at 26pt
+- Body: 20pt (10pt), Montserrat Regular (or Arial), body grey `464A4C`
+- Table headers: White text on Server Slate `313638` background, SemiBold
+- Page header: `D6D7D7` bottom border, muted grey `64686A` text with "Confidential" in Server Slate SemiBold (not red; red is a status)
+- Page footer: `D6D7D7` top border with page numbers in muted grey `64686A`
 
 ### Tables
-- Use thin gray borders (`E5E7EB`)
+- Square corners and square cells; no rounded shapes anywhere in the document
+- Use thin hairline borders (`D6D7D7`)
 - Cell margins: 60 top/bottom, 100 left/right
 - Always set both `columnWidths` and cell `width` in DXA
-- Use `ShadingType.CLEAR` for fills (never SOLID)
+- Header row filled Server Slate `313638`; alternate body rows banded `EAEBEB`
+- No shading other than the banding and the status cells; use `ShadingType.CLEAR` for fills (never SOLID)
 
 ### KPI Dashboard
-For the executive summary, create a 4-cell table with no borders, each cell a different brand color, containing a large number and a small label. This creates a visual dashboard effect.
+For the executive summary, create a 4-cell table with no borders and square cells, each cell filled with the status colour for what it reports (see the legend rule above), containing a large number and a small label in white (Server Slate text on a gold tile). Add the caption line under the tiles.
 
 ## Colour check before finishing
 
-- Every section with status cells has the legend row; the KPI tiles have their caption; no status colour is used decoratively.
+- Every section with status cells has the legend row; the KPI tiles have their caption; no status colour is used decoratively; Illumio Orange appears only as the title rule or as text at 24pt and larger; no cell shading other than banding and status cells.
 
 ## Adapting the Report
 
