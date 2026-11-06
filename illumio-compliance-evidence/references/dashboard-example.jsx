@@ -4,15 +4,33 @@ import React, { useState, useMemo } from "react";
 // the DATA block with the content of pack.json (see pack-schema.md).
 
 const C = {
-  green: "#00C48C", greenLight: "#E8FAF3", greenDark: "#00A876",
-  teal: "#00B4D8", tealLight: "#E5F7FB",
-  navy: "#1A1F36",
-  orange: "#FF6B35", orangeLight: "#FFF3ED",
-  red: "#E63946", redLight: "#FDE8EA",
-  amber: "#FEF3C7", amberDark: "#92400E",
-  gray50: "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB", gray300: "#D1D5DB",
-  gray400: "#9CA3AF", gray500: "#6B7280", gray700: "#374151", white: "#FFFFFF",
+  accent: "#FF5500",          // Illumio Orange: active tab underline, title rule, today/new marker; never a status
+  slate: "#313638",           // Server Slate: headings, primary text, table header rows
+  text: "#464A4C",            // body text
+  muted: "#64686A",           // captions, labels
+  green: "#166644",           // Safeguard Green: pass, allowed, enforced, healthy
+  greenLight: "rgba(22,102,68,0.10)",
+  greenDark: "#11432F",
+  teal: "#2D454C",            // System Cyan: info, selective, in progress
+  tealLight: "rgba(45,69,76,0.10)",
+  orange: "#F97607",          // Circuit Gold 110: warning, high (fills, swatches, bars; slate text on its tint)
+  orangeLight: "rgba(249,118,7,0.10)",
+  amber: "#FFA22F",           // Circuit Gold 100: medium
+  amberLight: "rgba(255,162,47,0.12)",
+  red: "#BE122F",             // Risk Red: critical, failed, blocked
+  redLight: "rgba(190,18,47,0.10)",
+  gray50: "#F7F4EE",          // page ground: Zero Trust Tan
+  gray100: "#F5F5F5",         // subtle fills
+  gray200: "#D6D7D7",         // borders
+  gray300: "#C1C3C3",
+  gray400: "#6F7274",         // muted text, minimum for small text on white
+  gray500: "#64686A",         // secondary text
+  gray700: "#464A4C",         // strong secondary text
+  white: "#FFFFFF",
 };
+const FONT = '"FK Grotesk", Montserrat, Arial, sans-serif';
+// <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet" />
+const BAND = "#EAEBEB";       // table banding
 
 // ==== DATA ====
 const pack = {
@@ -117,12 +135,14 @@ const evidence_index = [
 const not_covered = ["2.x secure configurations", "3.x to 4.x data protection", "5.x malware", "6.x software", "7.x and 8.x identity", "9.x physical", "11.x except 11.4.5", "12.x except 12.5.2"];
 // ==== END DATA ====
 
-const font = "'DM Sans', system-ui, sans-serif";
 const mono = "ui-monospace, Menlo, monospace";
 const ORDER = ["FAIL", "EXCEPTION", "NOT_TESTED", "ATTESTED", "PASS"];
+// Status fills: Risk Red FAIL, Circuit Gold EXCEPTION (slate text, never
+// white, and gold is never small text on its own), System Cyan NOT TESTED
+// and ATTESTED, Safeguard Green PASS. Illumio Orange is never a status.
 const STATUS = {
   FAIL: { bg: C.red, color: C.white, label: "FAIL" },
-  EXCEPTION: { bg: C.orange, color: C.white, label: "EXCEPTION" },
+  EXCEPTION: { bg: C.orange, color: C.slate, label: "EXCEPTION" },
   NOT_TESTED: { bg: C.teal, color: C.white, label: "NOT TESTED" },
   ATTESTED: { bg: C.teal, color: C.white, label: "ATTESTED" },
   PASS: { bg: C.green, color: C.white, label: "PASS" },
@@ -133,8 +153,9 @@ const fmt = (n) => (n == null ? "–" : n.toLocaleString("en-US"));
 const evidenceLabel = (e) => (typeof e === "string" ? e : [e.tool, e.query_name].filter(Boolean).join(" ") || JSON.stringify(e));
 const worst = (list) => ORDER.find((s) => list.includes(s)) || "PASS";
 
+// Small tag: the one place with a radius (2px). Never a pill.
 function Badge({ label, color, bg }) {
-  return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: bg, color, whiteSpace: "nowrap", fontFamily: font }}>{label}</span>;
+  return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 2, fontSize: 11, fontWeight: 600, background: bg, color, whiteSpace: "nowrap", fontFamily: FONT }}>{label}</span>;
 }
 const StatusBadge = ({ s }) => <Badge label={STATUS[s].label} bg={STATUS[s].bg} color={STATUS[s].color} />;
 
@@ -146,33 +167,36 @@ function Swatch({ color, kind }) {
 function Legend({ items }) {
   return (
     <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: C.gray500, marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.gray200}` }}>
-      <span style={{ fontWeight: 700 }}>Legend</span>
+      <span style={{ fontWeight: 600 }}>Legend</span>
       {items.map(([label, color, kind], i) => <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={color} kind={kind} />{label}</span>)}
     </div>
   );
 }
+// Illumio Field names: Risk Red, Circuit Gold, Safeguard Green, System Cyan.
 const LEGEND = {
-  status: [["FAIL", C.red], ["EXCEPTION: justified failure or capped result", C.orange], ["NOT TESTED or ATTESTED (the word says which)", C.teal], ["PASS", C.green]],
-  rows: [["row tint: FAIL", C.redLight], ["row tint: EXCEPTION", C.orangeLight], ["no tint: other", C.white]],
-  policy: [["allowed", C.green], ["potentially blocked", C.orange], ["blocked", C.red]],
-  timeline: [["blocked per day", C.red], ["potentially blocked", C.orange], ["spike (>= 3x median)", C.red, "outline"], ["3x median", C.red, "dash"]],
-  kpi: [["KPI top border: red or orange only when the count is above zero; grey otherwise", C.gray300]],
+  status: [["FAIL: Risk Red", C.red], ["EXCEPTION (justified failure or capped result): Circuit Gold", C.orange], ["NOT TESTED or ATTESTED (the word says which): System Cyan", C.teal], ["PASS: Safeguard Green", C.green]],
+  rows: [["row tint: FAIL (Risk Red 10%)", C.redLight], ["row tint: EXCEPTION (Circuit Gold 10%)", C.orangeLight], ["grey banding: no meaning", BAND]],
+  policy: [["allowed: Safeguard Green", C.green], ["potentially blocked: Circuit Gold", C.orange], ["blocked: Risk Red", C.red]],
+  timeline: [["blocked per day: Risk Red", C.red], ["potentially blocked: Circuit Gold", C.orange], ["spike (>= 3x median)", C.red, "outline"], ["3x median", C.red, "dash"]],
+  kpi: [["KPI top border: Risk Red or Circuit Gold only when the count is above zero; grey otherwise", C.gray300]],
 };
 function ColourKey() {
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: C.gray500 }}>
-      <span style={{ fontWeight: 700, marginRight: 2 }}>Colour key</span>
+      <span style={{ fontWeight: 600, marginRight: 2 }}>Colour key</span>
       {ORDER.filter((s) => s !== "ATTESTED").map((s) => <StatusBadge key={s} s={s} />)}
-      <span>· grey strips and borders mean nothing · each section has its own legend</span>
+      <span>· grey strips, borders and banding mean nothing · the orange tab underline is the brand accent, not a status · each section has its own legend</span>
     </div>
   );
 }
+// Top border Risk Red or Circuit Gold only for a non-zero risk count; grey
+// otherwise. White square tile on the tan ground, 1px border.
 function KPICard({ label, value, subtitle, attention }) {
   const border = value > 0 && attention === "high" ? C.red : value > 0 && attention === "medium" ? C.orange : C.gray300;
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: "14px 16px", borderTop: `4px solid ${border}`, minWidth: 0 }}>
-      <div style={{ fontSize: 12, color: C.gray500, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: 30, fontWeight: 800, color: C.navy, lineHeight: 1.2, marginTop: 4 }}>{fmt(value)}</div>
+    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, padding: "14px 16px", borderTop: `4px solid ${border}`, minWidth: 0 }}>
+      <div style={{ fontSize: 11, color: C.slate, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.6 }}>{label}</div>
+      <div style={{ fontSize: 30, fontWeight: 600, color: C.slate, lineHeight: 1.2, marginTop: 4 }}>{fmt(value)}</div>
       {subtitle && <div style={{ fontSize: 12, color: C.gray500, marginTop: 2 }}>{subtitle}</div>}
     </div>
   );
@@ -180,28 +204,31 @@ function KPICard({ label, value, subtitle, attention }) {
 function StatusBanner({ status, subtitle }) {
   const title = { FAIL: "Controls failing", EXCEPTION: "Exceptions to resolve", NOT_TESTED: "Inputs missing", ATTESTED: "Attestations only", PASS: "All tested controls pass" }[status];
   return (
-    <div style={{ background: STATUS[status].bg, color: C.white, borderRadius: 12, padding: "14px 18px" }}>
-      <div style={{ fontWeight: 800, fontSize: 17 }}>{STATUS[status].label}: {title}</div>
+    <div style={{ background: STATUS[status].bg, color: STATUS[status].color, padding: "14px 18px" }}>
+      <div style={{ fontWeight: 600, fontSize: 17 }}>{STATUS[status].label}: {title}</div>
       <div style={{ fontSize: 13, opacity: 0.92 }}>{subtitle}</div>
     </div>
   );
 }
+// Text tabs; the active tab carries a 2px Illumio Orange underline, the one
+// brand accent on the page. Not a status colour.
 function TabBar({ tabs, active, onChange }) {
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: C.gray100, padding: 6, borderRadius: 999, width: "fit-content" }}>
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", borderBottom: `1px solid ${C.gray200}` }}>
       {tabs.map((t) => (
-        <button key={t} onClick={() => onChange(t)} style={{ border: "none", cursor: "pointer", padding: "7px 14px", borderRadius: 999, fontFamily: font, fontWeight: 700, fontSize: 13, background: active === t ? C.navy : "transparent", color: active === t ? C.white : C.gray700 }}>{t}</button>
+        <button key={t} onClick={() => onChange(t)} style={{ border: "none", cursor: "pointer", padding: "8px 12px", fontFamily: FONT, background: "transparent", fontWeight: active === t ? 600 : 500, fontSize: 13,
+          color: active === t ? C.slate : C.gray500, marginBottom: -1, borderBottom: `2px solid ${active === t ? C.accent : "transparent"}` }}>{t}</button>
       ))}
     </div>
   );
 }
 function Section({ title, children, right }) {
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, borderRadius: 12, padding: 16, marginTop: 16 }}>
+    <div style={{ background: C.white, border: `1px solid ${C.gray200}`, padding: 16, marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ width: 4, height: 18, borderRadius: 2, background: C.gray300, display: "inline-block" }} />
-          <span style={{ fontWeight: 800, color: C.navy, fontSize: 15 }}>{title}</span>
+          <span style={{ fontWeight: 600, color: C.slate, fontSize: 15 }}>{title}</span>
         </div>
         {right}
       </div>
@@ -210,23 +237,25 @@ function Section({ title, children, right }) {
   );
 }
 function Chip({ label, active, onClick }) {
-  return <button onClick={onClick} style={{ cursor: "pointer", border: `1px solid ${active ? C.navy : C.gray300}`, background: active ? C.navy : C.white, color: active ? C.white : C.gray700, borderRadius: 999, padding: "4px 10px", fontSize: 12, fontWeight: 600, fontFamily: font }}>{label}</button>;
+  return <button onClick={onClick} style={{ cursor: "pointer", border: `1px solid ${active ? C.slate : C.gray300}`, background: active ? C.slate : C.white, color: active ? C.white : C.gray700, padding: "4px 10px", fontSize: 12, fontWeight: 500, fontFamily: FONT }}>{label}</button>;
 }
 function PolicyBar({ policy }) {
   const a = policy.allowed || 0, p = policy.potentiallyBlocked || 0, b = policy.blocked || 0, total = a + p + b;
   const seg = (n, color) => (total ? <div title={fmt(n)} style={{ width: `${(100 * n) / total}%`, background: color }} /> : null);
-  return <div title={`allowed ${fmt(a)} · potentially blocked ${fmt(p)} · blocked ${fmt(b)}`} style={{ display: "flex", height: 10, width: 110, borderRadius: 5, overflow: "hidden", background: C.gray200 }}>{seg(a, C.green)}{seg(p, C.orange)}{seg(b, C.red)}</div>;
+  return <div title={`allowed ${fmt(a)} · potentially blocked ${fmt(p)} · blocked ${fmt(b)}`} style={{ display: "flex", height: 10, width: 110, overflow: "hidden", background: C.gray200 }}>{seg(a, C.green)}{seg(p, C.orange)}{seg(b, C.red)}</div>;
 }
 function Table({ columns, rows, tint, empty }) {
   if (!rows.length) return <div style={{ color: C.gray500, fontSize: 13 }}>{empty}</div>;
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
-        <thead><tr>{columns.map((c) => <th key={c.key} style={{ textAlign: "left", padding: "8px 10px", color: C.gray500, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `2px solid ${C.gray200}`, whiteSpace: "nowrap" }}>{c.label}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => (
-          <tr key={i} style={{ background: tint ? tint(r) : "transparent" }}>
-            {columns.map((c) => <td key={c.key} style={{ padding: "8px 10px", borderBottom: `1px solid ${C.gray100}`, verticalAlign: "top", color: C.navy }}>{c.render ? c.render(r) : r[c.key]}</td>)}
-          </tr>))}</tbody>
+        <thead><tr>{columns.map((c) => <th key={c.key} style={{ textAlign: "left", padding: "8px 10px", background: C.slate, color: C.white, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap" }}>{c.label}</th>)}</tr></thead>
+        <tbody>{rows.map((r, i) => {
+          const t = tint ? tint(r) : "transparent";
+          return (
+          <tr key={i} style={{ background: t !== "transparent" ? t : i % 2 ? BAND : "transparent" }}>
+            {columns.map((c) => <td key={c.key} style={{ padding: "8px 10px", borderBottom: `1px solid ${C.gray200}`, verticalAlign: "top", color: C.text }}>{c.render ? c.render(r) : r[c.key]}</td>)}
+          </tr>); })}</tbody>
       </table>
     </div>
   );
@@ -240,7 +269,7 @@ function TimelineChart({ t }) {
   const median = nz.length ? nz[Math.floor(nz.length / 2)] : 0, thr = median * 3;
   const bw = (w - pad.l - pad.r) / s.length, y = (v) => pad.t + (h - pad.t - pad.b) * (1 - v / max);
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto", fontFamily: font }}>
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto", fontFamily: FONT }}>
       {[0, 0.5, 1].map((f) => <g key={f}><line x1={pad.l} x2={w - pad.r} y1={y(max * f)} y2={y(max * f)} stroke={C.gray200} /><text x={pad.l - 6} y={y(max * f) + 4} fontSize={10} fill={C.gray500} textAnchor="end">{Math.round(max * f)}</text></g>)}
       {s.map((x, i) => {
         const X = pad.l + i * bw + 2, width = Math.max(1, bw - 4), tot = x.blocked + x.potentially_blocked, spike = thr > 0 && tot >= thr;
@@ -274,11 +303,11 @@ function Overview() {
       </div>
       <Section title="Requirements by status">
         {(() => { const tot = requirements.length || 1; return (
-          <div style={{ display: "flex", height: 14, borderRadius: 7, overflow: "hidden", background: C.gray100 }}>
+          <div style={{ display: "flex", height: 14, overflow: "hidden", background: C.gray100 }}>
             {ORDER.map((s) => <div key={s} style={{ width: `${(100 * count(s)) / tot}%`, background: STATUS[s].bg }} />)}
           </div>); })()}
         <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13, color: C.gray700, flexWrap: "wrap" }}>
-          {ORDER.map((s) => <span key={s}><b style={{ color: STATUS[s].bg }}>{count(s)}</b> {STATUS[s].label.toLowerCase()}</span>)}
+          {ORDER.map((s) => <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Swatch color={STATUS[s].bg} /><b>{count(s)}</b> {STATUS[s].label.toLowerCase()}</span>)}
         </div>
         <Legend items={[...LEGEND.status, ...LEGEND.kpi]} />
       </Section>
@@ -287,7 +316,7 @@ function Overview() {
           <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "8px 0", borderBottom: i < findings.length - 1 ? `1px solid ${C.gray100}` : "none" }}>
             <StatusBadge s={f.result} />
             <div>
-              <div style={{ fontWeight: 700, color: C.navy, fontSize: 14 }}>Req {f.requirement} · {f.test} · {f.pair}</div>
+              <div style={{ fontWeight: 600, color: C.slate, fontSize: 14 }}>Req {f.requirement} · {f.test} · {f.pair}</div>
               <div style={{ color: C.gray700, fontSize: 13 }}>{f.detail} <span style={{ color: C.gray500 }}>→ {f.remediation}{f.owner ? ` (${f.owner})` : " (owner: unassigned)"}</span></div>
             </div>
           </div>)) : <div style={{ color: C.gray500, fontSize: 13 }}>No findings</div>}
@@ -306,16 +335,16 @@ function RequirementsTab() {
     <Section title="Control summary" right={<span style={{ color: C.gray500, fontSize: 12 }}>{rows.length} of {requirements.length}</span>}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{ORDER.map((s) => <Chip key={s} label={STATUS[s].label} active={f === s} onClick={() => setF(f === s ? null : s)} />)}</div>
       <Table columns={[
-        { key: "id", label: "Req", render: (r) => <span style={{ fontWeight: 800 }}>{r.id}</span> },
+        { key: "id", label: "Req", render: (r) => <span style={{ fontWeight: 600 }}>{r.id}</span> },
         { key: "title", label: "Requirement", render: (r) => <span>{r.title}<div style={{ color: C.gray500, fontSize: 11 }}>{r.citation}</div></span> },
         { key: "tests", label: "Tests", render: (r) => r.tests.join(", ") },
         { key: "result", label: "Result", render: (r) => <StatusBadge s={r.result} /> },
         { key: "gap", label: "Gap / remediation", render: (r) => (r.gap ? <span>{r.gap} <span style={{ color: C.gray500 }}>→ {r.remediation}</span></span> : <span style={{ color: C.gray400 }}>–</span>) },
-        { key: "more", label: "", render: (r) => <button onClick={() => setOpen(open === r.id ? null : r.id)} style={{ fontFamily: font, fontSize: 12, cursor: "pointer", border: `1px solid ${C.gray300}`, background: C.white, borderRadius: 6, padding: "2px 8px" }}>{open === r.id ? "hide" : "tests"}</button> },
+        { key: "more", label: "", render: (r) => <button onClick={() => setOpen(open === r.id ? null : r.id)} style={{ fontFamily: FONT, fontSize: 12, cursor: "pointer", border: `1px solid ${C.gray300}`, background: C.white, color: C.slate, padding: "2px 8px" }}>{open === r.id ? "hide" : "tests"}</button> },
       ]} rows={rows} tint={tintByResult} empty="No requirements match" />
       {open && (() => { const r = requirements.find((x) => x.id === open); return (
-        <div style={{ marginTop: 10, background: C.gray50, borderRadius: 10, padding: 12, fontSize: 13 }}>
-          <div style={{ fontWeight: 700, color: C.navy }}>Req {r.id}: tests and evidence</div>
+        <div style={{ marginTop: 10, background: C.gray100, border: `1px solid ${C.gray200}`, padding: 12, fontSize: 13 }}>
+          <div style={{ fontWeight: 600, color: C.slate }}>Req {r.id}: tests and evidence</div>
           {r.tests.map((tid) => { const t = tests.find((x) => x.id === tid); return (
             <div key={tid} style={{ marginTop: 6 }}><StatusBadge s={t.result} /> <b>{t.id} {t.name}</b> <span style={{ color: C.gray500 }}>rule: {t.rule}</span>
               {Object.entries(t.per_pair).map(([p, v]) => <div key={p} style={{ marginLeft: 12, color: C.gray700 }}>{p}: {v.measured} <span style={{ fontFamily: mono, fontSize: 11, color: C.gray500 }}>{v.evidence.map(evidenceLabel).join(", ")}</span></div>)}
@@ -350,22 +379,22 @@ function BoundaryTab() {
   return (
     <div>
       <Section title="Boundary traffic" right={<div style={{ display: "flex", gap: 6 }}>{pairs.map((p) => <Chip key={p} label={p} active={pair === p} onClick={() => setPair(p)} />)}</div>}>
-        <div style={{ fontWeight: 700, color: C.navy, fontSize: 13, marginBottom: 6 }}>Inbound crossings (allowed) · potentially blocked {fmt(b.inbound_potentially_blocked)} · blocked connections {fmt(b.inbound_blocked_connections)}</div>
+        <div style={{ fontWeight: 600, color: C.slate, fontSize: 13, marginBottom: 6 }}>Inbound crossings (allowed) · potentially blocked {fmt(b.inbound_potentially_blocked)} · blocked connections {fmt(b.inbound_blocked_connections)}</div>
         <Table columns={[
           { key: "peer", label: "Source" }, { key: "port", label: "Port", render: (r) => <span style={{ fontFamily: mono }}>{r.port}/{r.proto}</span> },
           { key: "connections", label: "Connections", render: (r) => fmt(r.connections) }, { key: "policy", label: "Policy", render: (r) => <PolicyBar policy={r.policy} /> }, { key: "approved", label: "Approved", render: approvedCell },
         ]} rows={b.inbound_admitted} empty="No inbound crossings" />
-        <div style={{ fontWeight: 700, color: C.navy, fontSize: 13, margin: "14px 0 6px" }}>Outbound crossings (allowed)</div>
+        <div style={{ fontWeight: 600, color: C.slate, fontSize: 13, margin: "14px 0 6px" }}>Outbound crossings (allowed)</div>
         <Table columns={[
           { key: "destination", label: "Destination", render: (r) => <span>{r.destination}{r.fqdn ? <div style={{ color: C.gray500, fontSize: 11 }}>{r.fqdn}</div> : null}</span> }, { key: "port", label: "Port", render: (r) => <span style={{ fontFamily: mono }}>{r.port}/{r.proto}</span> },
           { key: "connections", label: "Connections", render: (r) => fmt(r.connections) }, { key: "policy", label: "Policy", render: (r) => <PolicyBar policy={r.policy} /> }, { key: "approved", label: "Approved", render: approvedCell },
         ]} rows={b.outbound_admitted} empty="No outbound crossings" />
-        <Legend items={[...LEGEND.policy, ["approved: on the user's list", C.green], ["not approved: on no list although a list exists", C.red], ["no list: approved list not supplied (NOT TESTED)", C.teal]]} />
+        <Legend items={[...LEGEND.policy, ["approved: on the user's list (Safeguard Green)", C.green], ["not approved: on no list although a list exists (Risk Red)", C.red], ["no list: approved list not supplied, NOT TESTED (System Cyan)", C.teal]]} />
       </Section>
       <Section title="Blocked and potentially blocked per day">
         <TimelineChart t={b.timeline} />
-        <div style={{ fontSize: 13, color: C.gray700, marginTop: 6 }}>{b.timeline.worst_spike ? <span>Worst spike <b style={{ color: C.red }}>{b.timeline.worst_spike.label}, {b.timeline.worst_spike.multiple}x median</b></span> : "No spike"}{b.timeline.caveat && <div style={{ color: C.amberDark }}>{b.timeline.caveat}</div>}</div>
-        <Legend items={LEGEND.timeline} />
+        <div style={{ fontSize: 13, color: C.gray700, marginTop: 6 }}>{b.timeline.worst_spike ? <span>Worst spike <b style={{ color: C.red }}>{b.timeline.worst_spike.label}, {b.timeline.worst_spike.multiple}x median</b></span> : "No spike"}{b.timeline.caveat && <div style={{ background: C.amberLight, borderLeft: `4px solid ${C.amber}`, color: C.slate, padding: "6px 10px", marginTop: 6 }}>{b.timeline.caveat}</div>}</div>
+        <Legend items={[...LEGEND.timeline, ["Gold bar and tint: timeline caveat", C.amber]]} />
       </Section>
     </div>
   );
@@ -379,7 +408,7 @@ function AttestationsTab() {
         { key: "attested_by", label: "Attested by", render: (a) => a.attested_by || <span style={{ color: C.gray400 }}>–</span> }, { key: "date", label: "Date", render: (a) => a.date || <span style={{ color: C.gray400 }}>–</span> },
         { key: "document", label: "Document", render: (a) => a.document || <span style={{ color: C.gray400 }}>–</span> }, { key: "result", label: "Result", render: (a) => <StatusBadge s={a.result} /> },
       ]} rows={attestations} empty="No attestations" />
-      <Legend items={[["ATTESTED: a named person points to a document", C.teal], ["NOT TESTED: row left empty on purpose so the gap is visible", C.teal]]} />
+      <Legend items={[["ATTESTED: a named person points to a document (System Cyan)", C.teal], ["NOT TESTED: row left empty on purpose so the gap is visible (System Cyan)", C.teal]]} />
     </Section>
   );
 }
@@ -387,8 +416,8 @@ function AttestationsTab() {
 function DriftTab() {
   return (
     <Section title={`Drift since ${drift.previous_run_at}`}>
-      <Table columns={[{ key: "item", label: "Item" }, { key: "previous", label: "Previous" }, { key: "current", label: "Current" }, { key: "change", label: "Change", render: (d) => <Badge label={d.change} bg={d.change === "removed" ? C.red : d.change === "added" ? C.teal : C.orange} color={C.white} /> }]} rows={drift.items} empty="No drift" />
-      <Legend items={[["changed", C.orange], ["added", C.teal], ["removed", C.red]]} />
+      <Table columns={[{ key: "item", label: "Item" }, { key: "previous", label: "Previous" }, { key: "current", label: "Current" }, { key: "change", label: "Change", render: (d) => <Badge label={d.change} bg={d.change === "removed" ? C.red : d.change === "added" ? C.teal : C.orange} color={d.change === "changed" ? C.slate : C.white} /> }]} rows={drift.items} empty="No drift" />
+      <Legend items={[["changed: Circuit Gold", C.orange], ["added: System Cyan", C.teal], ["removed: Risk Red", C.red]]} />
     </Section>
   );
 }
@@ -411,13 +440,14 @@ export default function ComplianceEvidenceDashboard() {
   const status = pack.overall || worst(requirements.map((r) => r.result));
   const subtitle = `${pack.framework.toUpperCase()} ${pack.framework_version} · ${pack.scope_name} · ${pack.window.start} to ${pack.window.end} (${pack.window.days} days) · ${pack.policy_version} policy · ${pack.queries} PCE queries · run ${pack.run_number}`;
   return (
-    <div style={{ fontFamily: font, background: C.gray50, minHeight: "100vh", padding: 20, color: C.navy }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <div style={{ fontFamily: FONT, background: C.gray50, minHeight: "100vh", padding: 20, color: C.text }}>
+      <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <div style={{ maxWidth: 1240, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 12, color: C.green, fontWeight: 800, letterSpacing: 1 }}>ILLUMIO · COMPLIANCE EVIDENCE</div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>{pack.scope_name} · {pack.pce}</div>
+            <div style={{ fontSize: 11, color: C.slate, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Illumio · Compliance evidence</div>
+            <div style={{ fontSize: 28, fontWeight: 300, color: C.slate, lineHeight: 1.2 }}>{pack.scope_name} · {pack.pce}</div>
+            <div style={{ width: 48, height: 3, background: C.accent, marginTop: 6 }} />
           </div>
           <div style={{ fontSize: 12, color: C.gray500 }}>collected {pack.run_at} · server {pack.server_version}</div>
         </div>
