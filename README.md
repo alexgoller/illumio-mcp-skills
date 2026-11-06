@@ -36,7 +36,7 @@ The Claude Code plugin (`.claude-plugin/marketplace.json`) reads the skills stra
 
 **Directory:** `illumio-pce-security-assessment/`
 
-Generates a comprehensive Illumio PCE security assessment report as a branded `.docx` document. Use this skill whenever you need to analyze, assess, audit, or report on an Illumio PCE environment.
+Generates a comprehensive Illumio PCE security assessment report as a branded `.docx` document. Use this skill whenever you need to analyze, assess, audit, or report on an Illumio PCE environment. The output is a Word document, not a dashboard; the interactive view of the same assessment is illumio-security-dashboard.
 
 **Triggers:** PCE health check, segmentation roadmap, enforcement status report, lateral movement analysis, compliance check, policy gap analysis, ringfencing readiness, or anything involving evaluating the state of an Illumio deployment.
 
@@ -111,7 +111,7 @@ What can we block or fence **now** with the least chance of breaking something, 
 
 **Directory:** `illumio-security-dashboard-skill/`
 
-Generates an interactive single-file React (.jsx) security assessment dashboard for an Illumio PCE environment. Use this skill for interactive security posture visualization, network topology views, lateral movement visualization, or browser-based PCE security status.
+Generates an interactive single-file React (.jsx) security assessment dashboard for an Illumio PCE environment. Use this skill for interactive security posture visualization, network topology views, lateral movement visualization, or browser-based PCE security status. Not for the Word report; that is illumio-pce-assessment.
 
 **Triggers:** Interactive assessment, security dashboard, visual security report, network topology view, lateral movement visualization, or any request for a browser-based view of PCE security status.
 
