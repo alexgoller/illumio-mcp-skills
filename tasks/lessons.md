@@ -113,3 +113,15 @@
   standard dimensions, coverage tables carry the rest.
 - `cp` is aliased interactive here (already in the 2026-11-05 lesson) and it stalled a
   background chain again; `command cp -f` in every scripted copy.
+
+## 2026-11-06 illumio-mythos-readiness
+- A pointer into another skill's output must name what that output actually prints. The
+  contract said "call-plans.md: <line title>"; RRR's headings use its `for` keys. Read the
+  consumer's file, not its json, before fixing a pointer format.
+- Two agents independently softened "autonomous AI agent" to "autonomous agent" after
+  reading "no vendor or model is named". When a word is load-bearing, put it in the
+  contract's definition sentence verbatim and diff for it at the end.
+- A skill that grades another skill's run needs that run in its tests: run_all.sh calls the
+  sibling triage.py on generated fixtures, so a change in RRR's json breaks this skill's
+  checks instead of its users.
+

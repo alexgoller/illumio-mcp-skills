@@ -4,7 +4,7 @@ Skills building on the Illumio MCP server for Illumio Segmentation.
 
 ## Installing the skills
 
-**Claude Code:** the repo is a plugin marketplace; one command installs all nine skills as `/illumio:<name>`:
+**Claude Code:** the repo is a plugin marketplace; one command installs all ten skills as `/illumio:<name>`:
 
 ```
 /plugin install illumio --marketplace alexgoller/illumio-mcp-skills
@@ -26,7 +26,7 @@ The Claude Code plugin (`.claude-plugin/marketplace.json`) reads the skills stra
 
 ## Conventions
 
-- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server). A skill may ship a script that merges and scores the saved tool results (app-profile, rapid-risk-reduction, label-advisor); such a script never talks to the PCE. Writes to the PCE happen only where a skill says so up front (label-advisor's apply mode, labels only, after confirmation).
+- Skills call illumio-mcp tools only; gaps become issues on [illumio-mcp-server](https://github.com/alexgoller/illumio-mcp-server). A skill may ship a script that merges and scores the saved tool results (app-profile, rapid-risk-reduction, label-advisor, mythos-readiness); such a script never talks to the PCE. A skill may read another skill's saved run instead of pulling again (mythos-readiness grades a rapid-risk-reduction run). Writes to the PCE happen only where a skill says so up front (label-advisor's apply mode, labels only, after confirmation).
 - Every rendered output follows the [Illumio Field](https://claude.ai/artifact/GnMZFELJUu34V9YQWXRgYn) design system, the visual identity of the Illumio Brand Guidelines (November 2024): Zero Trust Tan and white grounds, Server Slate text, Illumio Orange as the one accent, Montserrat (FK Grotesk where installed), square corners, Server Slate table header rows. Each skill carries the same "Illumio Field" section in its design reference, so a zip stands alone.
 - Colour is used only for meaning: Risk Red critical or blocked, Safeguard Green pass or allowed, Circuit Gold warning, System Cyan info. Every dashboard, chart, document table or diagram that uses colour, bold or a tint carries a legend where the colour appears, and decorative colour is one neutral grey.
 
@@ -257,6 +257,31 @@ What labels should these workloads have. Never assumes the estate is labelled: r
 - Apply mode only: `create-label`, `update-workload` (labels field)
 
 **Known gaps (server issues):** [#78](https://github.com/alexgoller/illumio-mcp-server/issues/78) label values resolved by partial match on update, [#79](https://github.com/alexgoller/illumio-mcp-server/issues/79) bulk additive label assignment, [#80](https://github.com/alexgoller/illumio-mcp-server/issues/80) label dimensions, [#81](https://github.com/alexgoller/illumio-mcp-server/issues/81) paging for full workload detail, [#82](https://github.com/alexgoller/illumio-mcp-server/issues/82) workload-level infrastructure detection.
+
+### illumio-mythos-readiness
+
+**Directory:** `illumio-mythos-readiness/`
+
+How contained a breach would be today when the attacker is an autonomous AI agent that finds a foothold, exploits and moves laterally at machine speed. "Mythos readiness" is the author's own term, defined in the report's first sentence; no model vendor or product is named. The audience is the CISO. Every application is graded on a six-level ladder from what is in force on the PCE today (Unseen, Seen, Planned, Enforcing, Doors shut, Contained; levels 0 to 2 depend on a human noticing, 3 to 5 hold without one), the estate gets one level with the rule behind it (at least 80% of managed, labelled workloads at that level or above), and every application gets what moves it up one level, tied to the rapid-risk-reduction line that fixes it. Output is a CISO report (no scores, no rule text, no call plans in the main body; the risk map as the evidence appendix) and a single-file React dashboard in Illumio Field (readiness, apps, next steps, evidence, method). Reads a rapid-risk-reduction run; adds no PCE call and never writes.
+
+**Triggers:** Mythos readiness, how ready are we against AI-driven or autonomous attackers, breach containment grade, containment maturity per application, readiness report for the CISO or the board.
+
+**Prerequisites:**
+- The **illumio-rapid-risk-reduction** skill and a run of it with the same window (this skill reads its `plan.json`, `workloads.json` and `lateral.json`)
+- The **illumio-mcp** MCP server, **0.13.1 or later**, through that skill
+- Python 3 for `scripts/readiness.py` (stdlib only)
+
+**Layout:**
+- `SKILL.md`: workflow (ask, run rapid-risk-reduction, grade, present), constraints, verification, common mistakes
+- `references/ladder.md`: the six levels, their gates, the attacker's view, the estate rule, the next-step mapping and the Illumio semantics, stated once
+- `references/report-template.md`: the CISO report skeleton
+- `references/dashboard-spec.md`, `references/dashboard-example.jsx`: dashboard contract, Illumio Field rules and the template the script fills
+- `scripts/readiness.py`: grades every app, computes the estate and environment levels and the next steps, writes the json, the report and the dashboard
+- `tests/`: three synthetic estates run through both scripts and the checks the ladder is proven on (not in the zip)
+
+**Data Sources:** the rapid-risk-reduction run only (`plan.json` for the exposures, policy and risk map; `workloads.json` for enforcement modes and VEN state; `lateral.json` for reach). No tool call of its own.
+
+**Known gaps (server issues):** [#83](https://github.com/alexgoller/illumio-mcp-server/issues/83) unknown-source decisions per peer application, [#84](https://github.com/alexgoller/illumio-mcp-server/issues/84) wide-reach identities per destination application. Rapid-risk-reduction's gaps (#70 to #76) apply unchanged.
 
 ## Research
 
