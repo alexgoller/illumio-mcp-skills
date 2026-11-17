@@ -286,3 +286,9 @@ How contained a breach would be today when the attacker is an autonomous AI agen
 ## Research
 
 Notes on ideas that are not skills yet. [research/application-detection.md](research/application-detection.md): automatic application detection by clustering workloads on traffic and process evidence; prior art, algorithms feasible in stdlib Python, hostname token mining, evaluation against already-labelled workloads, and a recommended experimental pipeline. The label advisor deliberately does not cluster; see the note for why and for what an experiment would look like.
+
+## Licence and trademarks
+
+Copyright 2026 [Alex Goller](https://github.com/alexgoller). The skills in this repository, their scripts, references and templates, are licensed under the [Apache License 2.0](LICENSE). Every skill zip the release workflow builds carries a copy.
+
+Illumio, the Illumio logo and the Illumio brand guidelines are trademarks of Illumio, Inc. The licence covers the skill text, scripts and templates only and grants no right to the Illumio name or marks. The dashboards and documents the skills produce reference the Illumio Field design system by its colour and type tokens; no logo or brand asset is redistributed here. These skills are a personal project and not an Illumio product; Illumio does not maintain or support them.

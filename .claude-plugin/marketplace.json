@@ -11,6 +11,8 @@
       "name": "illumio",
       "description": "Illumio PCE skills: app profile, rapid risk reduction, unknown endpoints, compliance evidence, agentic AI risk, PCE assessment, daily assessment, security dashboard, label advisor, Mythos readiness. Needs the illumio-mcp MCP server.",
       "source": "./",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/alexgoller/illumio-mcp-skills",
       "strict": false,
       "skills": [
         "./illumio-agentic-ai-risk-assessment",
