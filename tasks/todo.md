@@ -608,3 +608,10 @@ evidence tab. Ten zips build, tests pruned, description 964 chars. Server issues
 decisions per peer app) and #84 (identities: destinations capped at 10) filed. Not run
 against a live PCE; the RRR dependency means a live run is that skill's nine pulls plus
 one script call.
+
+## Licence (2026-11-17)
+
+- [x] Apache-2.0 `LICENSE` at the root, copyright 2026 Alex Goller
+- [x] README section "Licence and trademarks": link to the author, Illumio marks stay Illumio's, Field referenced by tokens only, not an Illumio product
+- [x] `package.sh` copies `LICENSE` into every zip
+- [x] marketplace manifest carries `license` and `homepage`
